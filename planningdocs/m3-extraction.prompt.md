@@ -18,7 +18,7 @@ Both return `ExtractedDoc` from `src/models.py`.
 - Import `ExtractedDoc` from `src.models`
 
 ### `src/extraction/doc_intelligence.py`
-- `DocIntelligenceExtractor(Extractor)` — constructor takes `endpoint: str` (the Azure AI Foundry endpoint from env var `AZURE_AI_FOUNDRY_ENDPOINT`)
+- `DocIntelligenceExtractor(Extractor)` — constructor takes `endpoint: str` (the Azure AI Foundry services endpoint from env var `AZURE_AI_FOUNDRY_SERVICES_ENDPOINT`)
 - Uses `DefaultAzureCredential` from `azure-identity` for authentication — no API keys
 - `async extract(file_path: Path) -> ExtractedDoc`:
   - Use `azure.ai.documentintelligence.DocumentIntelligenceClient` with `DefaultAzureCredential` (sync client wrapped in async, or use the async client if available)

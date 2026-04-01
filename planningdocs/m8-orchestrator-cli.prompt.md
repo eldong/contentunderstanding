@@ -105,8 +105,8 @@ Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
   1. Load `.env` file using `dotenv.load_dotenv()`
   2. Set up components:
      - If `--mock`: use `MockExtractor()`
-     - Else: use `DocIntelligenceExtractor(endpoint=os.getenv("AZURE_AI_FOUNDRY_ENDPOINT"))`
-     - Create `AsyncAzureOpenAI` client using `DefaultAzureCredential` from `azure-identity` and `AZURE_AI_FOUNDRY_ENDPOINT` (unless `--mock` — then create mock-compatible stubs)
+     - Else: use `DocIntelligenceExtractor(endpoint=os.getenv("AZURE_AI_FOUNDRY_SERVICES_ENDPOINT"))`
+     - Create `AsyncAzureOpenAI` client using `DefaultAzureCredential` from `azure-identity` and `AZURE_AI_FOUNDRY_OPENAI_ENDPOINT` (unless `--mock` — then create mock-compatible stubs)
      - Create `FormAnalyzer(client, deployment)`
      - Create `AttachmentClassifier(client, deployment)`
      - Load `ValidatorRegistry.load("config/registry.yaml")`

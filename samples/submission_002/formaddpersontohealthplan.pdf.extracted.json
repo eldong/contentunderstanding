@@ -1,0 +1,12 @@
+{
+  "source_path": "samples/submission_002/formaddpersontohealthplan.pdf",
+  "content": "FEDERAL EMPLOYEES HEALTH BENEFITS\nHEALTH BENEFITS ELECTION FORM\nStandard Form 2809\n\nPart A - Enrollee Information\nName: John Davis\nEmployee ID: EMP-7823\nAgency: Department of Interior\n\nPart B - Type of Action\n[X] Add family member\n[ ] Cancel enrollment\n[ ] Change plan\n\nReason: Marriage\nEffective Date: 2026-02-01\n\nPart C - Family Member to Add\nName: Sarah Davis\nRelationship: Spouse\nDate of Birth: 1992-08-22\nSSN: XXX-XX-1234\n\nSignature: John Davis\nDate: 2026-01-25",
+  "fields": {
+    "form_type": "SF-2809",
+    "action": "Add family member",
+    "reason": "Marriage",
+    "employee_name": "John Davis",
+    "family_member_name": "Sarah Davis"
+  },
+  "confidence": 0.93
+}
