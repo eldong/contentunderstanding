@@ -3,6 +3,7 @@
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from src.ingestion.base import IngestionAdapter
 from src.models import SubmissionWorkItem
@@ -23,12 +24,13 @@ class LocalFolderAdapter(IngestionAdapter):
         for entry in sorted(self.root_dir.iterdir()):
             if not entry.is_dir():
                 continue
+
+            # Read optional metadata.json for submitted_by and extra fields
+            meta: dict[str, Any] = {}
             metadata_file = entry / "metadata.json"
-            if not metadata_file.exists():
-                logger.warning("Skipping %s — no metadata.json", entry.name)
-                continue
-            with metadata_file.open(encoding="utf-8") as f:
-                meta = json.load(f)
+            if metadata_file.exists():
+                with metadata_file.open(encoding="utf-8") as f:
+                    meta = json.load(f)
 
             # Find the form file (filename contains "form")
             form_path: Path | None = None
@@ -49,8 +51,8 @@ class LocalFolderAdapter(IngestionAdapter):
 
             submissions.append(
                 SubmissionWorkItem(
-                    submission_id=meta["submission_id"],
-                    submitted_by=meta["submitted_by"],
+                    submission_id=entry.name,
+                    submitted_by=meta.get("submitted_by", ""),
                     form_path=form_path,
                     attachment_paths=attachment_paths,
                     metadata=meta,

@@ -5,7 +5,7 @@ This is a Python project at `c:\work\opm\contentunderstanding`. It validates HR 
 
 ## What Already Exists
 - `pyproject.toml` — project config (may need updates)
-- `.env.example` — Azure credential placeholders
+- `.env.example` — Azure AI Foundry endpoint placeholder (uses `DefaultAzureCredential`, no API keys)
 - `src/__init__.py` — empty init
 - `src/models.py` — all 5 Pydantic v2 contracts (SubmissionWorkItem, ExtractedDoc, FormAnalysisResult, ClassifierResponse, ValidationResult)
 - `tests/test_models.py` — model tests

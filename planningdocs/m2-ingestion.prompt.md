@@ -19,17 +19,17 @@ Build the local folder ingestion layer that reads submission directories from a 
 - `LocalFolderAdapter(IngestionAdapter)` — constructor takes `root_dir: Path`
 - `list_submissions()` implementation:
   - Scans `root_dir` for subdirectories (each subdirectory = one submission)
-  - Each subdirectory must contain a `metadata.json` with `{"submission_id": "...", "submitted_by": "..."}`
+  - The folder name is the `submission_id`
+  - If a `metadata.json` exists in the subdirectory, read `submitted_by` from it; otherwise default to `""`
   - Finds the form file: look for a file with "form" in the name (e.g., `form.pdf`)
   - Finds attachment files: all other PDF/DOCX/JPG/PNG files in the directory
+  - Skips subdirectories that have no form file (log a warning)
   - Returns a list of `SubmissionWorkItem` with absolute paths
 - `download_submission()` — just return the matching `SubmissionWorkItem` from `list_submissions()` (local files are already "downloaded")
-- Skip subdirectories that don't have a `metadata.json` (log a warning)
 
 ### `samples/submission_001/metadata.json`
 ```json
 {
-  "submission_id": "SUB-001",
   "submitted_by": "Jane Employee"
 }
 ```
@@ -42,13 +42,13 @@ Build the local folder ingestion layer that reads submission directories from a 
 - Test `LocalFolderAdapter` using a temp directory (`tmp_path` fixture):
   - Create a sample submission directory structure with `metadata.json`, `form.pdf`, `attachment.pdf`
   - Assert `list_submissions()` returns correct number of submissions
-  - Assert `submission_id`, `submitted_by`, `form_path`, `attachment_paths` are correct
-  - Assert directories without `metadata.json` are skipped
+  - Assert `submission_id` (= folder name), `submitted_by`, `form_path`, `attachment_paths` are correct
+  - Assert directories without a form file are skipped
   - Test with multiple submissions
 - Test `download_submission()` returns the correct item
 
 ## Acceptance Criteria
-- `LocalFolderAdapter("samples").list_submissions()` returns a list with `SubmissionWorkItem(submission_id="SUB-001", submitted_by="Jane Employee", ...)`
+- `LocalFolderAdapter("samples").list_submissions()` returns a list with `SubmissionWorkItem(submission_id="submission_001", submitted_by="Jane Employee", ...)`
 - `form_path` points to the actual form file; `attachment_paths` contains the attachment file(s)
 - `pytest tests/test_ingestion.py` — all tests pass
 - Manual smoke test: `python -c "from src.ingestion.local_folder import LocalFolderAdapter; print(LocalFolderAdapter('samples').list_submissions())"`

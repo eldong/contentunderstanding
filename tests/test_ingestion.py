@@ -7,11 +7,12 @@ import pytest
 from src.ingestion.local_folder import LocalFolderAdapter
 
 
-def _make_submission(tmp_path, name, meta, form_name="form.pdf", attachments=None):
+def _make_submission(tmp_path, name, meta=None, form_name="form.pdf", attachments=None):
     """Helper to create a submission directory structure."""
     sub_dir = tmp_path / name
     sub_dir.mkdir()
-    (sub_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+    if meta is not None:
+        (sub_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
     (sub_dir / form_name).write_bytes(b"%PDF-1.4 placeholder")
     for att in attachments or []:
         (sub_dir / att).write_bytes(b"%PDF-1.4 placeholder")
@@ -23,7 +24,7 @@ class TestLocalFolderAdapter:
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Jane Employee"},
+            {"submitted_by": "Jane Employee"},
             attachments=["attachment.pdf"],
         )
         adapter = LocalFolderAdapter(tmp_path)
@@ -31,7 +32,7 @@ class TestLocalFolderAdapter:
 
         assert len(results) == 1
         item = results[0]
-        assert item.submission_id == "SUB-001"
+        assert item.submission_id == "sub1"
         assert item.submitted_by == "Jane Employee"
         assert item.form_path.name == "form.pdf"
         assert len(item.attachment_paths) == 1
@@ -41,12 +42,12 @@ class TestLocalFolderAdapter:
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
         )
         _make_submission(
             tmp_path,
             "sub2",
-            {"submission_id": "SUB-002", "submitted_by": "Bob"},
+            {"submitted_by": "Bob"},
             attachments=["cert.pdf", "photo.jpg"],
         )
         adapter = LocalFolderAdapter(tmp_path)
@@ -54,30 +55,39 @@ class TestLocalFolderAdapter:
 
         assert len(results) == 2
         ids = {r.submission_id for r in results}
-        assert ids == {"SUB-001", "SUB-002"}
+        assert ids == {"sub1", "sub2"}
 
-    def test_skips_directory_without_metadata(self, tmp_path):
+    def test_no_metadata_still_works(self, tmp_path):
+        _make_submission(tmp_path, "sub1", attachments=["attachment.pdf"])
+        adapter = LocalFolderAdapter(tmp_path)
+        results = adapter.list_submissions()
+
+        assert len(results) == 1
+        assert results[0].submission_id == "sub1"
+        assert results[0].submitted_by == ""
+
+    def test_skips_directory_without_form(self, tmp_path):
         _make_submission(
             tmp_path,
             "valid",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
         )
-        # directory without metadata.json
-        no_meta = tmp_path / "invalid"
-        no_meta.mkdir()
-        (no_meta / "form.pdf").write_bytes(b"%PDF-1.4")
+        # directory without a form file
+        no_form = tmp_path / "invalid"
+        no_form.mkdir()
+        (no_form / "attachment.pdf").write_bytes(b"%PDF-1.4")
 
         adapter = LocalFolderAdapter(tmp_path)
         results = adapter.list_submissions()
 
         assert len(results) == 1
-        assert results[0].submission_id == "SUB-001"
+        assert results[0].submission_id == "valid"
 
     def test_form_path_is_absolute(self, tmp_path):
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
         )
         adapter = LocalFolderAdapter(tmp_path)
         item = adapter.list_submissions()[0]
@@ -88,7 +98,7 @@ class TestLocalFolderAdapter:
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
             attachments=["att.pdf"],
         )
         adapter = LocalFolderAdapter(tmp_path)
@@ -101,18 +111,18 @@ class TestLocalFolderAdapter:
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
         )
         adapter = LocalFolderAdapter(tmp_path)
-        item = adapter.download_submission("SUB-001")
+        item = adapter.download_submission("sub1")
 
-        assert item.submission_id == "SUB-001"
+        assert item.submission_id == "sub1"
 
     def test_download_submission_not_found(self, tmp_path):
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
         )
         adapter = LocalFolderAdapter(tmp_path)
 
@@ -123,7 +133,7 @@ class TestLocalFolderAdapter:
         _make_submission(
             tmp_path,
             "sub1",
-            {"submission_id": "SUB-001", "submitted_by": "Alice"},
+            {"submitted_by": "Alice"},
             attachments=["cert.pdf", "photo.png", "letter.docx"],
         )
         adapter = LocalFolderAdapter(tmp_path)

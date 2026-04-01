@@ -18,15 +18,16 @@ Both return `ExtractedDoc` from `src/models.py`.
 - Import `ExtractedDoc` from `src.models`
 
 ### `src/extraction/doc_intelligence.py`
-- `DocIntelligenceExtractor(Extractor)` — constructor takes `endpoint: str` and `key: str` (loaded from env vars `AZURE_DOC_INTEL_ENDPOINT` and `AZURE_DOC_INTEL_KEY`)
+- `DocIntelligenceExtractor(Extractor)` — constructor takes `endpoint: str` (the Azure AI Foundry endpoint from env var `AZURE_AI_FOUNDRY_ENDPOINT`)
+- Uses `DefaultAzureCredential` from `azure-identity` for authentication — no API keys
 - `async extract(file_path: Path) -> ExtractedDoc`:
-  - Use `azure.ai.documentintelligence.DocumentIntelligenceClient` (sync client wrapped in async, or use the async client if available)
+  - Use `azure.ai.documentintelligence.DocumentIntelligenceClient` with `DefaultAzureCredential` (sync client wrapped in async, or use the async client if available)
   - Use the `prebuilt-read` model
   - Read the file bytes, call `begin_analyze_document` with the file content
   - Extract all text content from the result pages
   - Extract key-value pairs if available (from `result.key_value_pairs`)
   - Return `ExtractedDoc(source_path=str(file_path), content=full_text, fields=kv_pairs, confidence=avg_confidence)`
-- Load credentials from environment using `python-dotenv`
+- Load endpoint from environment using `python-dotenv`; authenticate via `DefaultAzureCredential` (no API keys)
 
 ### `src/extraction/mock_extractor.py`
 - `MockExtractor(Extractor)` — no constructor args needed
@@ -70,7 +71,7 @@ Create a realistic mock extraction result for a marriage certificate:
   - Create a temp directory with a sidecar `.extracted.json` file
   - Call `extract()`, assert the returned `ExtractedDoc` matches the sidecar content
   - Test missing sidecar — should return empty content with confidence 0.0
-- Test `DocIntelligenceExtractor` construction (don't call Azure — just assert it can be instantiated with fake creds)
+- Test `DocIntelligenceExtractor` construction (don't call Azure — just assert it can be instantiated with a fake endpoint)
 - Use `pytest.mark.asyncio` for async tests
 
 ## Acceptance Criteria
@@ -78,7 +79,7 @@ Create a realistic mock extraction result for a marriage certificate:
 - `MockExtractor` handles missing sidecar gracefully (returns empty doc, no crash)
 - Sample sidecar files in `samples/submission_001/` contain realistic form + marriage certificate text
 - `pytest tests/test_extraction.py` — all tests pass
-- `DocIntelligenceExtractor` can be instantiated (integration test with real Azure is manual)
+- `DocIntelligenceExtractor` can be instantiated with `DefaultAzureCredential` (integration test with real Azure is manual)
 
 ## Constraints
 - All extract methods are `async` (the ABC enforces this)

@@ -9,5 +9,8 @@ src/contentunderstanding.egg-info/requires.txt
 src/contentunderstanding.egg-info/top_level.txt
 src/extraction/__init__.py
 src/ingestion/__init__.py
+src/ingestion/base.py
+src/ingestion/local_folder.py
 src/validators/__init__.py
+tests/test_ingestion.py
 tests/test_models.py
