@@ -81,6 +81,10 @@ class TestLLMValidator:
 
         assert result.status == "passed"
         assert result.reasons == []
+        assert len(result.passed_reasons) == 3
+        assert "Names match form" in result.passed_reasons
+        assert any("within" in r for r in result.passed_reasons)
+        assert "Appears official" in result.passed_reasons
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -103,6 +107,8 @@ class TestLLMValidator:
         assert len(result.reasons) == 2
         assert "No seal found" in result.reasons
         assert any("not within" in r for r in result.reasons)
+        assert len(result.passed_reasons) == 1
+        assert "Names match" in result.passed_reasons[0]
 
     @pytest.mark.asyncio
     async def test_prompt_includes_validation_rules(self):
@@ -290,6 +296,10 @@ class TestMarriageCertificateValidation:
 
         assert result.status == "passed"
         assert result.reasons == []
+        assert len(result.passed_reasons) == 3
+        assert any("Jane Smith" in r or "Michael" in r for r in result.passed_reasons)
+        assert any("within" in r for r in result.passed_reasons)
+        assert any("seal" in r.lower() or "officiant" in r.lower() for r in result.passed_reasons)
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -311,6 +321,7 @@ class TestMarriageCertificateValidation:
         assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "Jane Smith" in result.reasons[0]
+        assert len(result.passed_reasons) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -332,6 +343,7 @@ class TestMarriageCertificateValidation:
         assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "Michael" in result.reasons[0]
+        assert len(result.passed_reasons) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -354,6 +366,8 @@ class TestMarriageCertificateValidation:
         assert len(result.reasons) == 1
         assert "not within" in result.reasons[0]
         assert "2020-01-10" in result.reasons[0]
+        assert len(result.passed_reasons) == 2
+        assert "Names match" in result.passed_reasons[0]
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -375,6 +389,7 @@ class TestMarriageCertificateValidation:
         assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "seal" in result.reasons[0].lower() or "government" in result.reasons[0].lower()
+        assert len(result.passed_reasons) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -395,6 +410,7 @@ class TestMarriageCertificateValidation:
 
         assert result.status == "failed"
         assert len(result.reasons) == 3
+        assert result.passed_reasons == []
 
     @pytest.mark.asyncio
     async def test_prompt_uses_real_yaml_rules(self):

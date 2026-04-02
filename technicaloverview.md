@@ -43,7 +43,7 @@ Five Pydantic v2 models in [src/models.py](src/models.py) define the data flowin
 | `ExtractedDoc` | OCR/extraction output | `source_path`, `content`, `fields`, `confidence` |
 | `FormAnalysisResult` | LLM form analysis | `form_type`, `reason`, `employee_first_name`, `employee_last_name`, `beneficiary_first_name`, `is_relevant` |
 | `ClassifierResponse` | LLM attachment classification | `doc_type`, `confidence`, `reasoning` |
-| `ValidationResult` | Final output per attachment | `submission_id`, `form_name`, `submitted_by`, `doc_type`, `status` (`"passed"` / `"failed"` / `"error"`), `reasons`, `timestamp` |
+| `ValidationResult` | Final output per attachment | `submission_id`, `form_name`, `submitted_by`, `doc_type`, `status` (`"passed"` / `"failed"` / `"error"`), `reasons`, `passed_reasons`, `timestamp` |
 
 ## Pipeline Stages
 
@@ -127,6 +127,7 @@ A single generic validator class. Uses `validation_rules` from a `DocTypeConfig`
 Returns `ValidationResult` with:
 - `status = "passed"` if all rules pass, `"failed"` if any fail
 - `reasons` = list of explanations for failed rules
+- `passed_reasons` = list of explanations for passed rules (for audit trail)
 
 **Registry:** `ValidatorRegistry` — [src/validators/registry.py](src/validators/registry.py)
 

@@ -108,10 +108,21 @@ class TestValidationResult:
             form_name="Add Beneficiary",
             submitted_by="Jane",
             status="passed",
+            passed_reasons=["Names match", "Date is within range"],
         )
         assert result.status == "passed"
         assert result.reasons == []
+        assert len(result.passed_reasons) == 2
         assert result.timestamp  # auto-generated
+
+    def test_passed_reasons_defaults_empty(self):
+        result = ValidationResult(
+            submission_id="SUB-001",
+            form_name="Add Beneficiary",
+            submitted_by="Jane",
+            status="passed",
+        )
+        assert result.passed_reasons == []
 
     def test_fail_result(self):
         result = ValidationResult(
@@ -137,10 +148,12 @@ class TestValidationResult:
             submission_id="SUB-001",
             form_name="Add Beneficiary",
             submitted_by="Jane",
-            status="error",
-            reasons=["Form not relevant"],
+            status="passed",
+            reasons=[],
+            passed_reasons=["Names match", "Date is within range"],
         )
         data = result.model_dump_json()
         restored = ValidationResult.model_validate_json(data)
-        assert restored.status == "error"
-        assert restored.reasons == ["Form not relevant"]
+        assert restored.status == "passed"
+        assert restored.reasons == []
+        assert restored.passed_reasons == ["Names match", "Date is within range"]

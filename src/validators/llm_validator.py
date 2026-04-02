@@ -114,6 +114,7 @@ class LLMValidator(BaseValidator):
 
         raw = json.loads(response.choices[0].message.content)
         failed_reasons: list[str] = []
+        passed_reasons: list[str] = []
 
         for r in raw["results"]:
             date_check = r.get("date_check")
@@ -150,8 +151,15 @@ class LLMValidator(BaseValidator):
                         f"The date {event_date.isoformat()} is not within the last "
                         f"{window_str} (cutoff: {cutoff.isoformat()})"
                     )
+                else:
+                    passed_reasons.append(
+                        f"The date {event_date.isoformat()} is within the last "
+                        f"{window_str} (cutoff: {cutoff.isoformat()})"
+                    )
             elif not r["passed"]:
                 failed_reasons.append(r["reason"])
+            else:
+                passed_reasons.append(r["reason"])
 
         return ValidationResult(
             submission_id="",
@@ -159,4 +167,5 @@ class LLMValidator(BaseValidator):
             submitted_by="",
             status="passed" if not failed_reasons else "failed",
             reasons=failed_reasons,
+            passed_reasons=passed_reasons,
         )

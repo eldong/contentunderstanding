@@ -140,6 +140,11 @@ Each line in `results.jsonl` is a JSON object:
   "doc_type": "marriage_certificate",
   "status": "passed",
   "reasons": [],
+  "passed_reasons": [
+    "Names Jane Smith and Michael match the employee and beneficiary on the form",
+    "The date 2026-02-14 is within the last 12 months (cutoff: 2025-04-02)",
+    "Document contains official state seal and officiant signature"
+  ],
   "timestamp": "2026-04-02T12:00:00+00:00"
 }
 ```
@@ -148,6 +153,7 @@ Each line in `results.jsonl` is a JSON object:
 |-------|-------------|
 | `status` | `"passed"` — all validation rules satisfied. `"failed"` — one or more rules not met. `"error"` — a processing failure occurred (extraction, classification, or no matching form type). |
 | `reasons` | Empty when passed. When failed, lists the specific rules that were not satisfied (e.g. `"The marriage date must be within the last 12 months"`). When error, describes what went wrong (e.g. `"Form extraction failed: ..."`). |
+| `passed_reasons` | Lists the specific rules that were satisfied, with explanations. Provides an audit trail showing why each rule passed. |
 
 ### Run tests
 
