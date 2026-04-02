@@ -5,13 +5,14 @@ This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdoc
 - `src/models.py` — 5 Pydantic contracts
 - `src/ingestion/` — `IngestionAdapter` ABC + `LocalFolderAdapter`
 - `src/extraction/` — `Extractor` ABC + `DocIntelligenceExtractor` + `MockExtractor`
-- `src/classification/form_analyzer.py` — `FormAnalyzer` (LLM)
-- `src/classification/attachment_classifier.py` — `AttachmentClassifier` (LLM)
+- `src/classification/doc_type_config.py` — `DocTypeConfig` model + `load_doc_type_configs()`
+- `src/classification/form_analyzer.py` — `FormAnalyzer` (LLM, data-driven from doc type configs)
+- `src/classification/attachment_classifier.py` — `AttachmentClassifier` (LLM, data-driven from doc type configs)
 - `src/validators/base.py` — `BaseValidator` ABC
-- `src/validators/registry.py` — `ValidatorRegistry` (YAML config, dynamic import)
-- `src/validators/marriage_certificate.py` — `MarriageCertificateAgent` (LLM)
-- `config/registry.yaml` — maps `marriage_certificate` → `MarriageCertificateAgent`
-- `samples/submission_001/` — sample submission with mock sidecar JSON files
+- `src/validators/llm_validator.py` — `LLMValidator` (generic, rules from YAML)
+- `src/validators/registry.py` — `ValidatorRegistry` (auto-discovers from `config/doc_types/`)
+- `config/doc_types/marriage_certificate.yaml` — first doc type definition with validation rules
+- `samples/submission_001/` and `samples/submission_002/` — sample submissions with mock sidecar JSON files
 
 Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
 
@@ -100,26 +101,24 @@ Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
 - Arguments:
   - `--input` / `-i` — path to submissions folder (default: `samples/`)
   - `--output` / `-o` — path to results file (default: `results.jsonl`)
+  - `--config` / `-c` — path to doc types config directory (default: `config/doc_types/`)
   - `--mock` — flag: use `MockExtractor` instead of `DocIntelligenceExtractor`
 - Implementation:
   1. Load `.env` file using `dotenv.load_dotenv()`
-  2. Set up components:
+  2. Load doc type configs: `doc_type_configs = load_doc_type_configs(args.config)`
+  3. Set up components:
      - If `--mock`: use `MockExtractor()`
      - Else: use `DocIntelligenceExtractor(endpoint=os.getenv("AZURE_AI_FOUNDRY_SERVICES_ENDPOINT"))`
      - Create `AsyncAzureOpenAI` client using `DefaultAzureCredential` from `azure-identity` and `AZURE_AI_FOUNDRY_OPENAI_ENDPOINT` (unless `--mock` — then create mock-compatible stubs)
-     - Create `FormAnalyzer(client, deployment)`
-     - Create `AttachmentClassifier(client, deployment)`
-     - Load `ValidatorRegistry.load("config/registry.yaml")`
-     - Configure validators that need the OpenAI client (call `validator.configure(client, deployment)` for each)
+     - Create `FormAnalyzer(client, deployment, doc_type_configs)`
+     - Create `AttachmentClassifier(client, deployment, doc_type_configs)`
+     - Create `ValidatorRegistry.load(args.config, client, deployment)`
      - Create `LocalFolderAdapter(args.input)`
      - Create `ResultWriter(args.output)`
-  3. Create `Orchestrator` with all components
-  4. Run `asyncio.run(orchestrator.run())`
-  5. Print summary: number of submissions processed, pass/fail/skip counts
-- For `--mock` mode: also need to handle the LLM calls. Two approaches:
-  - **Option A (recommended)**: When `--mock` is set, also mock the LLM responses using a `MockFormAnalyzer` / `MockAttachmentClassifier` that return hardcoded results based on heuristics (e.g., if "add beneficiary" in text → relevant)
-  - **Option B**: Still call Azure OpenAI even in mock mode (only extraction is mocked)
-  - **Go with Option B** — mock only extraction, still use real LLM. Add a `--mock-llm` flag for fully offline mode later if needed.
+  4. Create `Orchestrator` with all components
+  5. Run `asyncio.run(orchestrator.run())`
+  6. Print summary: number of submissions processed, pass/fail/skip counts
+- For `--mock` mode: mock only extraction, still use real LLM. Add a `--mock-llm` flag for fully offline mode later if needed.
 
 ### `tests/test_pipeline.py`
 - Full end-to-end pipeline test with all components mocked
@@ -137,6 +136,7 @@ Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
 ### `tests/conftest.py`
 - Shared pytest fixtures:
   - `mock_openai_client` — returns an `AsyncMock` of `AsyncAzureOpenAI`
+  - `sample_doc_type_configs` — returns a list of `DocTypeConfig` for testing
   - `sample_form_extracted` — returns an `ExtractedDoc` with the sample add-beneficiary form text
   - `sample_attachment_extracted` — returns an `ExtractedDoc` with the sample marriage certificate text
   - `sample_form_analysis_relevant` — returns a `FormAnalysisResult` with `is_relevant=True, reason="marriage"`
@@ -147,6 +147,7 @@ Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
 - `python main.py --input samples/ --output results.jsonl --mock` runs end-to-end (extraction mocked, LLM calls real if Azure creds are set)
 - `results.jsonl` contains one JSON line per submission/attachment with all `ValidationResult` fields
 - Orchestrator contains ZERO doc-type-specific logic
+- All components receive doc type configs from the shared `config/doc_types/` directory
 - `pytest tests/test_pipeline.py` — all tests pass with fully mocked components
 - `pytest` (all tests) — everything passes
 
@@ -156,3 +157,4 @@ Now wire everything together: Orchestrator, Result Writer, and CLI entry point.
 - Do not modify files from previous milestones unless strictly necessary for integration
 - Keep `main.py` simple — it's a wiring layer, not business logic
 - Use `asyncio.run()` to bridge sync CLI → async pipeline
+- Use `DefaultAzureCredential` from `azure-identity` — no API keys

@@ -17,8 +17,22 @@ Document Validation System POC — validates HR submissions (form PDF + supporti
 - `src/models.py` — 5 Pydantic v2 contracts (SubmissionWorkItem, ExtractedDoc, FormAnalysisResult, ClassifierResponse, ValidationResult)
 - `src/ingestion/` — `IngestionAdapter` ABC + `LocalFolderAdapter`
 - `src/extraction/` — `Extractor` ABC + `DocIntelligenceExtractor` + `MockExtractor` (sidecar JSON)
-- `src/classification/` — form analyzer + attachment classifier (GPT-4o)
-- `src/validators/` — registry + doc-type-specific validators
+- `src/classification/` — `DocTypeConfig` + `DocTypeRuleConfig` + `FormAnalyzer` + `AttachmentClassifier` (GPT-4o, data-driven)
+- `src/validators/` — `BaseValidator` ABC + `LLMValidator` (generic) + `ValidatorRegistry` (auto-discovers from config)
+- `config/doc_types/` — YAML files defining attachment document types, indicators, and validation rules
+- `config/doc_type_rules/` — YAML files defining life events, required doc types, and form-field validation rules
+
+## Data-Driven Configuration
+- **Doc types** (`config/doc_types/`): Each YAML defines an attachment document type (e.g., `marriage_certificate.yaml`)
+  - Fields: `doc_type`, `display_name`, `description`, `indicators`, `validation_rules`
+- **Doc type rules** (`config/doc_type_rules/`): Each YAML defines a life event / reason (e.g., `marriage.yaml`)
+  - Fields: `reason`, `display_name`, `description`, `required_doc_types`, `form_validation_rules`
+  - Reasons with no attachments (e.g. `new_hire`) set `required_doc_types: []`
+- Adding a new type or reason = adding a YAML file. No Python code changes needed.
+- `FormAnalyzer` builds its prompt dynamically from all loaded `DocTypeRuleConfig`s
+- `AttachmentClassifier` builds its prompt from all loaded `DocTypeConfig`s
+- `ValidatorRegistry` auto-discovers configs and creates `LLMValidator` instances
+- No per-type Python validator classes — `LLMValidator` is the single generic implementation
 
 ## Conventions
 - Python 3.11+, Pydantic v2

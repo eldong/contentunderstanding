@@ -1,10 +1,13 @@
 You are implementing Milestone 6 of a Document Validation System POC.
 
 ## Context
-This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-5 are complete — we have contracts, ingestion, extraction, form analyzer, and attachment classifier. Now build the validator framework.
+This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-5 are complete — we have contracts, ingestion, extraction, form analyzer, and attachment classifier. All classification is data-driven via `config/doc_types/*.yaml` files. Now build the validator framework that uses the same config files.
 
 ## Goal
-Build the pluggable validator architecture: a `BaseValidator` ABC, a `ValidatorRegistry` that loads validator mappings from YAML config and dynamically imports validator classes, and the `config/registry.yaml` file.
+Build the pluggable validator architecture: a `BaseValidator` ABC and a `ValidatorRegistry` that auto-discovers doc types from `config/doc_types/` and creates a generic `LLMValidator` for each. No per-type Python classes needed — validation rules come from the YAML config files.
+
+## Data-Driven Design
+Instead of a separate `registry.yaml` and per-type validator classes, the registry auto-discovers `config/doc_types/*.yaml` files (already created in M4). Each file's `validation_rules` list drives a generic `LLMValidator` that builds a GPT-4o prompt from those rules. Adding a new validated type = adding a YAML file.
 
 ## Files to Create
 
@@ -13,61 +16,82 @@ Build the pluggable validator architecture: a `BaseValidator` ABC, a `ValidatorR
 - Single abstract method: `async validate(form_analysis: FormAnalysisResult, attachment_extracted: ExtractedDoc) -> ValidationResult`
 - Import `FormAnalysisResult`, `ExtractedDoc`, `ValidationResult` from `src.models`
 
+### `src/validators/llm_validator.py`
+- `LLMValidator(BaseValidator)` — a generic validator driven by config
+- Constructor takes:
+  - `client: openai.AsyncAzureOpenAI`
+  - `deployment: str`
+  - `doc_type_config: DocTypeConfig`
+- Method: `async validate(form_analysis: FormAnalysisResult, attachment_extracted: ExtractedDoc) -> ValidationResult`
+- Implementation:
+  1. Build a system prompt from `doc_type_config.validation_rules`:
+     ```
+     You are a document validator for HR benefit submissions.
+     You are verifying a "{display_name}" attachment against the submitted form.
+
+     Employee name from form: {employee_first_name} {employee_last_name}
+     Beneficiary name from form: {beneficiary_first_name}
+     Today's date: {today_date}
+
+     Validate the following rules against the attachment text:
+     {for each rule in validation_rules:}
+     - {rule}
+
+     For each rule, determine if it passes or fails. Return ONLY valid JSON:
+     {
+       "results": [
+         {"rule": "rule text", "passed": true|false, "reason": "explanation"}
+       ]
+     }
+     ```
+  2. Send user message with attachment text
+  3. Use `response_format={"type": "json_object"}`
+  4. Parse response and build `ValidationResult`:
+     - Collect all failed rules as `reasons`
+     - `status` = `"pass"` if no failures, else `"fail"`
+
 ### `src/validators/registry.py`
 - `ValidatorRegistry` class
-- Constructor: `__init__(self)` — initializes an empty `_validators: dict[str, BaseValidator]` mapping
-- Class method or static method: `load(config_path: Path) -> ValidatorRegistry`
-  - Reads `config_path` (a YAML file) using `yaml.safe_load()`
-  - Expected YAML structure:
-    ```yaml
-    validators:
-      marriage_certificate:
-        class: src.validators.marriage_certificate.MarriageCertificateAgent
-      # future:
-      # birth_certificate:
-      #   class: src.validators.birth_certificate.BirthCertificateAgent
-    ```
-  - For each entry: dynamically import the class using `importlib.import_module()` and `getattr()`
-    - Split the class path: module = everything before the last dot, class_name = last dot segment
-    - e.g., `"src.validators.marriage_certificate.MarriageCertificateAgent"` → module `"src.validators.marriage_certificate"`, class `"MarriageCertificateAgent"`
-  - Instantiate the class (no-arg constructor for now) and store in `_validators[doc_type]`
-  - Return the populated `ValidatorRegistry`
+- Constructor: `__init__(self, validators: dict[str, BaseValidator])`
+- Class method: `load(config_dir: Path, client: AsyncAzureOpenAI, deployment: str) -> ValidatorRegistry`
+  - Calls `load_doc_type_configs(config_dir)` (from M4's `doc_type_config.py`)
+  - For each config, creates an `LLMValidator(client, deployment, config)`
+  - Stores in `_validators[config.doc_type]`
+  - Returns populated registry
 - Method: `get_validator(doc_type: str) -> BaseValidator | None`
-  - Returns the validator instance for the given doc_type, or `None` if not registered
-
-### `config/registry.yaml`
-```yaml
-validators:
-  marriage_certificate:
-    class: src.validators.marriage_certificate.MarriageCertificateAgent
-```
-
-### `src/validators/marriage_certificate.py` (STUB ONLY for this milestone)
-- Create a minimal stub so the registry can import it:
-  ```python
-  from src.validators.base import BaseValidator
-  from src.models import FormAnalysisResult, ExtractedDoc, ValidationResult
-
-  class MarriageCertificateAgent(BaseValidator):
-      async def validate(self, form_analysis: FormAnalysisResult, attachment_extracted: ExtractedDoc) -> ValidationResult:
-          raise NotImplementedError("Will be implemented in Milestone 7")
-  ```
+  - Returns the validator for the given doc type, or `None` if not registered
+- Method: `list_doc_types() -> list[str]`
+  - Returns all registered doc type names
 
 ### `tests/test_validators.py`
 - Test class `TestValidatorRegistry`:
-  1. **Load from YAML** — create a temp YAML file with a validator entry pointing to `MarriageCertificateAgent`, call `ValidatorRegistry.load()`, assert it loads without error
-  2. **Get known validator** — `get_validator("marriage_certificate")` returns an instance of `MarriageCertificateAgent`
+  1. **Load from config dir** — create temp YAML files, call `ValidatorRegistry.load()` with a mock OpenAI client, assert it loads
+  2. **Get known validator** — `get_validator("marriage_certificate")` returns an `LLMValidator` instance
   3. **Get unknown validator** — `get_validator("unknown")` returns `None`
-  4. **Get unregistered doc type** — `get_validator("birth_certificate")` returns `None`
-  5. **Empty config** — YAML with no validators, registry loads fine, all lookups return `None`
+  4. **List doc types** — returns all registered types
+  5. **Empty config dir** — loads fine, all lookups return `None`
+- Test class `TestLLMValidator`:
+  1. **All rules pass** — mock LLM returns all rules passed. Assert `status="pass"`, `reasons=[]`
+  2. **Some rules fail** — mock LLM returns mixed results. Assert `status="fail"` with failed rule reasons
+  3. **Prompt includes validation rules** — assert system prompt contains rules from the config
+  4. **Prompt includes form data** — assert employee/beneficiary names appear in the prompt
 - Test `BaseValidator` is abstract — cannot be instantiated directly
+- Use `pytest.mark.asyncio` and `unittest.mock.AsyncMock`
 
 ## Acceptance Criteria
-- `ValidatorRegistry.load("config/registry.yaml")` succeeds and loads the `MarriageCertificateAgent` stub
-- `registry.get_validator("marriage_certificate")` returns a `MarriageCertificateAgent` instance
+- `ValidatorRegistry.load("config/doc_types/", client, deployment)` auto-discovers YAML files and creates `LLMValidator` instances
+- `registry.get_validator("marriage_certificate")` returns an `LLMValidator` configured with the marriage certificate rules
 - `registry.get_validator("unknown")` returns `None`
+- `LLMValidator` builds prompts dynamically from `validation_rules` in the YAML
 - `pytest tests/test_validators.py` — all tests pass
-- Adding a new doc type requires only: (1) a new validator class file, (2) a new entry in `registry.yaml`. No code changes to registry or orchestrator.
+- Adding a new validated doc type requires ONLY adding a new YAML file in `config/doc_types/`
+
+## Constraints
+- No per-type Python validator classes — `LLMValidator` is the single generic implementation
+- The `config/registry.yaml` file is NOT used — auto-discovery from `config/doc_types/` replaces it
+- All methods are `async`
+- Use `DefaultAzureCredential` from `azure-identity` — no API keys
+- Do not add new dependencies
 
 ## Constraints
 - Use `importlib` for dynamic imports — no hardcoded class references in the registry

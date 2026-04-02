@@ -32,6 +32,9 @@ src/
   extraction/            # Extract text from documents (Azure Doc Intelligence or mock)
   classification/        # Classify forms and attachments (GPT-4o)
   validators/            # Validate attachments against form requirements
+config/
+  doc_types/             # YAML definitions for attachment document types
+  doc_type_rules/        # YAML definitions for life events / validation rules per reason
 samples/                 # Sample submission folders for development
 tests/                   # Automated tests (no Azure calls)
 ```
@@ -85,8 +88,18 @@ print(result.content[:100])
 "
 ```
 
-### M4: Form Analyzer
-_Coming soon_ — GPT-4o analyzes the form to determine type and relevance.
+### M4: Form Analyzer (complete)
+GPT-4o analyzes extracted form text to determine form type, life event reason, employee/beneficiary names, and relevance. Returns `FormAnalysisResult`.
+
+Configuration is **data-driven** with two YAML folders:
+- `config/doc_types/` — defines attachment document types (indicators, validation rules)
+- `config/doc_type_rules/` — defines life events (required doc types, form-field validation rules)
+
+Reasons that need no attachments (e.g. `new_hire`) set `required_doc_types: []` and only have `form_validation_rules`. Adding a new reason or document type means adding a YAML file; no Python code changes needed.
+
+```bash
+pytest tests/test_classification.py tests/test_doc_type_config.py tests/test_doc_type_rule_config.py -v
+```
 
 ### M5: Attachment Classifier
 _Coming soon_ — GPT-4o classifies attachment documents.
@@ -107,7 +120,10 @@ _Coming soon_ — End-to-end pipeline with CLI interface.
 pytest -v
 
 # Specific milestone
-pytest tests/test_models.py -v        # M1
-pytest tests/test_ingestion.py -v     # M2
-pytest tests/test_extraction.py -v    # M3
+pytest tests/test_models.py -v           # M1
+pytest tests/test_ingestion.py -v        # M2
+pytest tests/test_extraction.py -v       # M3
+pytest tests/test_classification.py -v   # M4
+pytest tests/test_doc_type_config.py -v  # M4 doc type configs
+pytest tests/test_doc_type_rule_config.py -v  # M4 doc type rules
 ```

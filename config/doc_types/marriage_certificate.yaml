@@ -1,0 +1,13 @@
+doc_type: marriage_certificate
+display_name: Marriage Certificate
+description: "Official government-issued certificate or license of marriage"
+indicators:
+  - "certificate of marriage"
+  - "united in marriage"
+  - "marriage license"
+  - "joined in marriage"
+  - "certificate of marriage registration"
+validation_rules:
+  - "The names on the certificate must match the employee and/or beneficiary names on the form"
+  - "The marriage date must be recent (within the last 12 months)"
+  - "The document must appear to be an official government-issued certificate"

@@ -1,0 +1,8 @@
+reason: marriage
+display_name: Marriage
+description: "Employee is adding a beneficiary due to a recent marriage"
+required_doc_types:
+  - marriage_certificate
+form_validation_rules:
+  - "Beneficiary first name must be filled out"
+  - "The marriage checkbox or reason must be selected on the form"
