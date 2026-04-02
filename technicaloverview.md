@@ -122,6 +122,8 @@ async def validate(self, form_analysis: FormAnalysisResult, attachment_extracted
 
 A single generic validator class. Uses `validation_rules` from a `DocTypeConfig` to build a GPT-4o prompt that checks each rule against the attachment text. The prompt includes employee/beneficiary names from the form analysis and today's date for time-sensitive rules.
 
+**Date-window rule handling:** LLMs are unreliable at making pass/fail decisions on date comparisons, so the validator uses a hybrid approach. The LLM is instructed to auto-detect rules involving date-window checks (e.g. "must be within the last 12 months") and return a `date_check` object containing the `extracted_date` (YYYY-MM-DD) and the `window` (e.g. "12 months") instead of deciding pass/fail itself. Python then performs the date comparison deterministically. For all other rules, the LLM's pass/fail judgment is used directly. This keeps YAML rules in plain English — business users don't need to learn any special syntax — while ensuring date math is always correct.
+
 Returns `ValidationResult` with:
 - `status = "passed"` if all rules pass, `"failed"` if any fail
 - `reasons` = list of explanations for failed rules
@@ -216,7 +218,7 @@ The OpenAI client obtains a token for the `https://cognitiveservices.azure.com/.
 
 ## Testing
 
-90 tests across 8 test files. All tests mock Azure services — no live calls.
+92 tests across 8 test files. All tests mock Azure services — no live calls.
 
 | Test File | What It Covers |
 |-----------|---------------|

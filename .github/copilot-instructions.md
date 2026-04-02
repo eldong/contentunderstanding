@@ -41,3 +41,8 @@ Document Validation System POC — validates HR submissions (form PDF + supporti
 - Tests use `tmp_path` fixture, mock Azure services — never call Azure in automated tests
 - Dependencies declared in `pyproject.toml`, no `requirements.txt`
 - Install with `pip install -e ".[dev]"`
+
+## Document Updates
+- Update readme.md when adding new features or making significant changes that would a business user should know about
+- Update technicaloverview.md and the docs in `docs/` for any architectural changes, new modules, or significant implementation details that developers should be aware of
+- Update `copilot-instructions.md` for any changes that would impact how Copilot should generate code (e.g., new architectural patterns, coding conventions, or dependencies)

@@ -1,7 +1,8 @@
 """Tests for the validator framework: BaseValidator, LLMValidator, ValidatorRegistry."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -62,12 +63,15 @@ class TestBaseValidator:
 
 class TestLLMValidator:
     @pytest.mark.asyncio
-    async def test_all_rules_pass(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_all_rules_pass(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": True, "reason": "Names match form"},
-                {"rule": "marriage date recent", "passed": True, "reason": "Within 12 months"},
-                {"rule": "official doc", "passed": True, "reason": "Appears official"},
+                {"rule": "names match", "passed": True, "reason": "Names match form", "date_check": None},
+                {"rule": "marriage date within 12 months", "passed": True, "reason": "extracted date", "date_check": {"extracted_date": "2026-02-14", "window": "12 months"}},
+                {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -79,12 +83,15 @@ class TestLLMValidator:
         assert result.reasons == []
 
     @pytest.mark.asyncio
-    async def test_some_rules_fail(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_some_rules_fail(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": True, "reason": "Names match"},
-                {"rule": "marriage date recent", "passed": False, "reason": "Date is 3 years ago"},
-                {"rule": "official doc", "passed": False, "reason": "No seal found"},
+                {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
+                {"rule": "date within 12 months", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "official doc", "passed": False, "reason": "No seal found", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -94,8 +101,8 @@ class TestLLMValidator:
 
         assert result.status == "failed"
         assert len(result.reasons) == 2
-        assert "Date is 3 years ago" in result.reasons
         assert "No seal found" in result.reasons
+        assert any("not within" in r for r in result.reasons)
 
     @pytest.mark.asyncio
     async def test_prompt_includes_validation_rules(self):
@@ -232,7 +239,7 @@ MARRIAGE_CERT_CONFIG = DocTypeConfig(
     ],
     validation_rules=[
         "The names on the certificate must match the employee and/or beneficiary names on the form",
-        "The marriage date must be recent (within the last 12 months)",
+        "The marriage date must be within the last 12 months",
         "The document must appear to be an official government-issued certificate",
     ],
 )
@@ -265,12 +272,15 @@ class TestMarriageCertificateValidation:
     """Tests the LLMValidator with the real marriage_certificate.yaml rules."""
 
     @pytest.mark.asyncio
-    async def test_all_rules_pass(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_all_rules_pass(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": True, "reason": "Jane Smith and Michael appear on certificate"},
-                {"rule": "date recent", "passed": True, "reason": "Marriage date March 2026 is within 12 months"},
-                {"rule": "official doc", "passed": True, "reason": "Contains state seal and officiant"},
+                {"rule": "names match", "passed": True, "reason": "Jane Smith and Michael appear on certificate", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "official doc", "passed": True, "reason": "Contains state seal and officiant", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -282,12 +292,15 @@ class TestMarriageCertificateValidation:
         assert result.reasons == []
 
     @pytest.mark.asyncio
-    async def test_employee_name_mismatch(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_employee_name_mismatch(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": False, "reason": "Employee name Jane Smith not found on certificate"},
-                {"rule": "date recent", "passed": True, "reason": "Date is recent"},
-                {"rule": "official doc", "passed": True, "reason": "Appears official"},
+                {"rule": "names match", "passed": False, "reason": "Employee name Jane Smith not found on certificate", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -300,12 +313,15 @@ class TestMarriageCertificateValidation:
         assert "Jane Smith" in result.reasons[0]
 
     @pytest.mark.asyncio
-    async def test_beneficiary_name_mismatch(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_beneficiary_name_mismatch(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": False, "reason": "Beneficiary name Michael does not appear on certificate"},
-                {"rule": "date recent", "passed": True, "reason": "Date is recent"},
-                {"rule": "official doc", "passed": True, "reason": "Appears official"},
+                {"rule": "names match", "passed": False, "reason": "Beneficiary name Michael does not appear on certificate", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -318,12 +334,15 @@ class TestMarriageCertificateValidation:
         assert "Michael" in result.reasons[0]
 
     @pytest.mark.asyncio
-    async def test_date_too_old(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_date_too_old(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": True, "reason": "Names match"},
-                {"rule": "date recent", "passed": False, "reason": "Marriage date is older than 12 months (2020-01-10)"},
-                {"rule": "official doc", "passed": True, "reason": "Appears official"},
+                {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -333,15 +352,19 @@ class TestMarriageCertificateValidation:
 
         assert result.status == "failed"
         assert len(result.reasons) == 1
-        assert "older than 12 months" in result.reasons[0]
+        assert "not within" in result.reasons[0]
+        assert "2020-01-10" in result.reasons[0]
 
     @pytest.mark.asyncio
-    async def test_not_official_document(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_not_official_document(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": True, "reason": "Names match"},
-                {"rule": "date recent", "passed": True, "reason": "Date is recent"},
-                {"rule": "official doc", "passed": False, "reason": "No government seal or letterhead found"},
+                {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "official doc", "passed": False, "reason": "No government seal or letterhead found", "date_check": None},
             ]
         }
         client = _make_mock_client(response)
@@ -354,12 +377,15 @@ class TestMarriageCertificateValidation:
         assert "seal" in result.reasons[0].lower() or "government" in result.reasons[0].lower()
 
     @pytest.mark.asyncio
-    async def test_multiple_failures(self):
+    @patch("src.validators.llm_validator.date")
+    async def test_multiple_failures(self, mock_date):
+        mock_date.today.return_value = date(2026, 4, 2)
+        mock_date.fromisoformat = date.fromisoformat
         response = {
             "results": [
-                {"rule": "names match", "passed": False, "reason": "No matching names found"},
-                {"rule": "date recent", "passed": False, "reason": "Marriage date is from 2019"},
-                {"rule": "official doc", "passed": False, "reason": "Document appears to be a photocopy"},
+                {"rule": "names match", "passed": False, "reason": "No matching names found", "date_check": None},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "official doc", "passed": False, "reason": "Document appears to be a photocopy", "date_check": None},
             ]
         }
         client = _make_mock_client(response)

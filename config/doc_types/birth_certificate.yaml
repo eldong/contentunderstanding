@@ -11,5 +11,5 @@ indicators:
   - "birth registration"
 validation_rules:
   - "The child's name on the certificate must match the dependent name on the form"
-  - "The birth date must be recent (within the last 12 months) unless adding an existing child"
+  - "The birth date must be within the last 12 months"
   - "The document must appear to be an official government-issued certificate"
