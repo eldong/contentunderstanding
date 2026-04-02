@@ -1,169 +1,156 @@
-# Document Validation System POC
+# Document Validation System
 
-Validates HR submissions (form PDF + supporting attachments) using Azure Document Intelligence for extraction and Azure OpenAI GPT-4o for classification/validation.
+Automates the validation of HR benefit submissions. Each submission contains an enrollment form and supporting documents (marriage certificates, birth certificates, etc.). The system extracts text from all documents, classifies them, and validates that the supporting documents satisfy the requirements for the requested benefit change.
 
-## Prerequisites
-
-- Python 3.11+
-- Azure CLI (`az login` for authentication)
-- Azure AI Foundry project with:
-  - GPT-4o deployment
-  - Document Intelligence service
-
-## Setup
-
-```bash
-# Clone and install
-pip install -e ".[dev]"
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your Azure AI Foundry endpoints
-```
-
-Authentication uses `DefaultAzureCredential` — no API keys needed. Run `az login` locally.
-
-## Project Structure
-
-```
-src/
-  models.py              # Pydantic v2 data contracts
-  ingestion/             # Read submission directories
-  extraction/            # Extract text from documents (Azure Doc Intelligence or mock)
-  classification/        # Classify forms and attachments (GPT-4o)
-  validators/            # Validate attachments against form requirements
-config/
-  doc_types/             # YAML definitions for attachment document types
-  form_types/            # YAML definitions for life events / validation rules per reason
-samples/                 # Sample submission folders for development
-tests/                   # Automated tests (no Azure calls)
-```
+Built on Azure Document Intelligence (OCR/extraction) and Azure OpenAI GPT-4o (classification/validation).
 
 ## How It Works
 
-Each submission is a folder containing:
-- A **form** (filename contains "form") — the HR enrollment/change form
-- **Attachments** — supporting documents (marriage certificates, birth certificates, etc.)
-- Optional **metadata.json** — provides `submitted_by` if present
-
-The folder name is the submission ID.
-
-The pipeline:
-1. **Ingestion** — scans submission folders, builds work items
-2. **Extraction** — OCRs documents into text + structured fields
-3. **Classification** — identifies form type and attachment document types
-4. **Validation** — checks attachments against form requirements
-
-## Milestones
-
-### M1: Scaffold & Contracts (complete)
-Pydantic v2 data models in `src/models.py`:
-- `SubmissionWorkItem`, `ExtractedDoc`, `FormAnalysisResult`, `ClassifierResponse`, `ValidationResult`
-
-```bash
-python -c "from src.models import SubmissionWorkItem, ExtractedDoc, FormAnalysisResult, ClassifierResponse, ValidationResult; print('OK')"
+```
+Submission Folder          Pipeline                        Output
+┌──────────────────┐                                  ┌───────────────┐
+│ form.pdf         │──▶ Extract ──▶ Classify Form     │ results.jsonl │
+│ marriage_cert.pdf│──▶ Extract ──▶ Classify ──▶ Validate ──▶│               │
+│ metadata.json    │                                  └───────────────┘
+└──────────────────┘
 ```
 
-### M2: Ingestion (complete)
-Local folder adapter reads submission directories from `samples/`.
+1. **Ingestion** — scans a folder of submissions; each subfolder is one submission
+2. **Extraction** — converts PDFs and images to text using Azure Document Intelligence
+3. **Classification** — GPT-4o identifies the form type (e.g. "add dependent") and each attachment's document type (e.g. "marriage certificate")
+4. **Validation** — GPT-4o checks each attachment against the validation rules for its document type (name matching, date recency, official document, etc.)
 
-```bash
-# List all submissions
-python -c "from src.ingestion.local_folder import LocalFolderAdapter; print(LocalFolderAdapter('samples').list_submissions())"
+Results are written to a JSONL file with one line per validated attachment, including status (`passed`, `failed`, or `error`) and reasons. If `AZURE_STORAGE_ACCOUNT_URL` and `AZURE_RESULTS_CONTAINER_NAME` are set, results are also uploaded to the specified Azure Blob Storage container.
+
+## Key Concepts
+
+### Submissions
+
+A submission is a folder containing:
+
+| Item | Description |
+|------|-------------|
+| **Form** | The HR enrollment/change form. Identified by having "form" in the filename. |
+| **Attachments** | Supporting documents — any other PDF, DOCX, JPG, or PNG file in the folder. |
+| **metadata.json** | Optional. Provides `submitted_by` if present. |
+
+The folder name is used as the submission ID. Folders without a form file are skipped.
+
+### Data-Driven Configuration
+
+All document types and form rules are defined in YAML — no code changes needed to support new types.
+
+**Document types** (`config/doc_types/`) define what kinds of attachments the system recognizes and how to validate them:
+
+```yaml
+# config/doc_types/marriage_certificate.yaml
+doc_type: marriage_certificate
+display_name: Marriage Certificate
+description: "Official government-issued certificate or license of marriage"
+indicators:
+  - "certificate of marriage"
+  - "marriage license"
+validation_rules:
+  - "The names on the certificate must match the employee and/or beneficiary names"
+  - "The marriage date must be within the last 12 months"
+  - "The document must appear to be an official government-issued certificate"
 ```
 
-### M3: Extraction (complete)
-Two extractors:
-- `MockExtractor` — reads `.extracted.json` sidecar files (offline development)
-- `DocIntelligenceExtractor` — calls Azure Document Intelligence (used in production)
+**Form types** (`config/form_types/`) define which attachments are required for each type of HR action:
 
-```bash
-# Test mock extraction
-python -c "
-import asyncio
-from pathlib import Path
-from src.extraction.mock_extractor import MockExtractor
-result = asyncio.run(MockExtractor().extract(Path('samples/submission_001/form.pdf')))
-print(result.content[:100])
-"
+```yaml
+# config/form_types/add_dependent_health.yaml
+doc_type: add_dependent_health
+display_name: Health Insurance Dependent Addition Form
+description: "Form for adding a dependent to employee health insurance"
+required_attachment_types:
+  - marriage_certificate
+  - birth_certificate
+form_validation_rules:
+  - "The employee name must be filled out on the form"
+  - "A relationship must be selected (spouse or child)"
 ```
 
-### M4: Form Analyzer (complete)
-GPT-4o analyzes extracted form text to determine form type, life event reason, employee/beneficiary names, and relevance. Returns `FormAnalysisResult`.
+To add support for a new document type or form type, add a YAML file to the appropriate folder.
 
-Configuration is **data-driven** with two YAML folders:
-- `config/doc_types/` — defines attachment document types (indicators, validation rules)
-- `config/form_types/` — defines life events (required doc types, form-field validation rules)
+## Setup
 
-Reasons that need no attachments (e.g. `new_hire`) set `required_attachment_types: []` and only have `form_validation_rules`. Adding a new reason or document type means adding a YAML file; no Python code changes needed.
+### Prerequisites
+
+- Python 3.11+
+- Azure CLI (run `az login` for authentication)
+- An Azure AI Foundry project with a GPT-4o deployment and Document Intelligence service
+
+### Install
 
 ```bash
-pytest tests/test_classification.py tests/test_doc_type_config.py tests/test_form_type_config.py -v
+pip install -e ".[dev]"
 ```
 
-### M5: Attachment Classifier (complete)
-GPT-4o classifies attachment documents into registered doc types (or `"unknown"`). The `AttachmentClassifier` builds its prompt dynamically from `config/doc_types/` configs — doc types, descriptions, and indicators. Returns `ClassifierResponse` with `doc_type`, `confidence`, and `reasoning`.
+### Environment
+
+Copy the example and fill in your Azure endpoints:
 
 ```bash
-pytest tests/test_classification.py::TestAttachmentClassifier -v
+cp .env.example .env
 ```
 
-### M6: Validator Registry (complete)
-YAML-driven validator framework with three components:
-- `BaseValidator` — abstract interface for all validators
-- `LLMValidator` — generic GPT-4o validator driven by `validation_rules` from `config/doc_types/` configs. Builds a prompt with employee/beneficiary names and validation rules, sends attachment text, parses pass/fail results.
-- `ValidatorRegistry` — auto-discovers doc-type configs and creates an `LLMValidator` per type. Lookup by `doc_type`, no per-type Python classes needed.
+| Variable | Description |
+|----------|-------------|
+| `AZURE_AI_FOUNDRY_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint (e.g. `https://your-project.openai.azure.com/`) |
+| `AZURE_AI_FOUNDRY_SERVICES_ENDPOINT` | Your Azure AI Services endpoint (for Document Intelligence) |
+| `AZURE_OPENAI_DEPLOYMENT` | Model deployment name (default: `gpt-4o`) |
+| `AZURE_OPENAI_API_VERSION` | API version (default: `2024-12-01-preview`) |
+| `AZURE_STORAGE_ACCOUNT_URL` | *(Optional)* Azure Storage account URL for uploading results (e.g. `https://myaccount.blob.core.windows.net`) |
+| `AZURE_RESULTS_CONTAINER_NAME` | *(Optional)* Blob container name for results. Set both blob vars to enable upload. |
+
+Authentication uses `DefaultAzureCredential` — no API keys needed. Run `az login` before use.
+
+## Usage
+
+### Validate submissions
 
 ```bash
-pytest tests/test_validators.py -v
-```
-
-### M7: Marriage Certificate Validation (complete)
-End-to-end validation testing for the marriage certificate doc type. Verifies the `LLMValidator` with the real `config/doc_types/marriage_certificate.yaml` rules across 8 scenarios: all-pass, employee name mismatch, beneficiary name mismatch, date too old, unofficial document, multiple failures, prompt rule inclusion, and prompt form-data inclusion. No marriage-specific Python code — the generic `LLMValidator` handles everything via YAML config.
-
-```bash
-pytest tests/test_validators.py::TestMarriageCertificateValidation -v
-```
-
-### M8: Orchestrator & CLI (complete)
-End-to-end pipeline wiring all components together:
-- `ResultWriter` — appends `ValidationResult` objects as JSON lines (JSONL format)
-- `Orchestrator` — runs the full pipeline: ingestion → extraction → form analysis → attachment classification → validation. Contains zero doc-type-specific logic; routes entirely via classifier + registry.
-- `main.py` — CLI entry point with `argparse`
-
-```bash
-# Run with mock extraction (no Azure Doc Intelligence needed)
-python main.py --mock --input samples/ --output results.jsonl
-
-# Run with real Azure services
+# Using Azure Document Intelligence for extraction
 python main.py --input samples/ --output results.jsonl
+
+# Using mock extraction (offline development, reads .mock.extracted.json sidecar files)
+python main.py --mock --input samples/ --output results.jsonl
 ```
 
-CLI flags:
-- `--input` / `-i` — submissions folder (default: `samples/`)
-- `--output` / `-o` — results JSONL file (default: `results.jsonl`)
-- `--config` / `-c` — doc types config dir (default: `config/doc_types/`)
-- `--rules` / `-r` — form types config dir (default: `config/form_types/`)
-- `--mock` — use `MockExtractor` instead of Azure Document Intelligence
+### CLI options
 
-```bash
-pytest tests/test_pipeline.py -v
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--input`, `-i` | `samples/` | Path to the submissions folder |
+| `--output`, `-o` | `results.jsonl` | Path to the output JSONL file |
+| `--config`, `-c` | `config/doc_types/` | Path to document type configs |
+| `--rules`, `-r` | `config/form_types/` | Path to form type configs |
+| `--mock` | off | Use mock extraction instead of Azure Document Intelligence |
+
+### Output format
+
+Each line in `results.jsonl` is a JSON object:
+
+```json
+{
+  "submission_id": "submission_001",
+  "form_name": "add_dependent_health",
+  "submitted_by": "john.doe",
+  "doc_type": "marriage_certificate",
+  "status": "passed",
+  "reasons": [],
+  "timestamp": "2026-04-02T12:00:00+00:00"
+}
 ```
 
-## Running Tests
+| Field | Description |
+|-------|-------------|
+| `status` | `"passed"` — all validation rules satisfied. `"failed"` — one or more rules not met. `"error"` — a processing failure occurred (extraction, classification, or no matching form type). |
+| `reasons` | Empty when passed. When failed, lists the specific rules that were not satisfied (e.g. `"The marriage date must be within the last 12 months"`). When error, describes what went wrong (e.g. `"Form extraction failed: ..."`). |
+
+### Run tests
 
 ```bash
-# All tests
 pytest -v
-
-# Specific milestone
-pytest tests/test_models.py -v           # M1
-pytest tests/test_ingestion.py -v        # M2
-pytest tests/test_extraction.py -v       # M3
-pytest tests/test_classification.py -v   # M4
-pytest tests/test_doc_type_config.py -v  # M4 doc type configs
-pytest tests/test_form_type_config.py -v  # M4 form types
-pytest tests/test_validators.py -v        # M6
-pytest tests/test_validators.py::TestMarriageCertificateValidation -v  # M7
-pytest tests/test_pipeline.py -v          # M8
 ```

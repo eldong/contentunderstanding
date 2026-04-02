@@ -9,6 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 from src.classification.attachment_classifier import AttachmentClassifier
 from src.classification.doc_type_config import load_doc_type_configs
 from src.classification.form_type_config import load_form_type_configs
@@ -17,7 +19,7 @@ from src.extraction.mock_extractor import MockExtractor
 from src.ingestion.local_folder import LocalFolderAdapter
 from src.models import ValidationResult
 from src.orchestrator import Orchestrator
-from src.result_writer import ResultWriter
+from src.result_writer import BlobResultWriter, ResultWriter
 from src.validators.registry import ValidatorRegistry
 
 
@@ -100,7 +102,15 @@ async def run(args: argparse.Namespace) -> list[ValidationResult]:
     validator_registry = ValidatorRegistry.load(
         Path(args.config), client, deployment
     )
-    result_writer = ResultWriter(Path(args.output))
+
+    storage_account_url = os.getenv("AZURE_STORAGE_ACCOUNT_URL")
+    container_name = os.getenv("AZURE_RESULTS_CONTAINER_NAME")
+    if storage_account_url and container_name:
+        result_writer = BlobResultWriter(
+            Path(args.output), storage_account_url, container_name
+        )
+    else:
+        result_writer = ResultWriter(Path(args.output))
 
     orchestrator = Orchestrator(
         ingestion=ingestion,
@@ -111,7 +121,13 @@ async def run(args: argparse.Namespace) -> list[ValidationResult]:
         result_writer=result_writer,
     )
 
-    return await orchestrator.run()
+    results = await orchestrator.run()
+
+    if isinstance(result_writer, BlobResultWriter):
+        result_writer.upload()
+        logger.info("Results uploaded to blob container '%s'", container_name)
+
+    return results
 
 
 def main(argv: list[str] | None = None) -> None:

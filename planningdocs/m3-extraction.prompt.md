@@ -32,12 +32,12 @@ Both return `ExtractedDoc` from `src/models.py`.
 ### `src/extraction/mock_extractor.py`
 - `MockExtractor(Extractor)` — no constructor args needed
 - `async extract(file_path: Path) -> ExtractedDoc`:
-  - Look for a JSON sidecar file next to the input file: `{file_path}.extracted.json`
-    - e.g., for `samples/submission_001/form.pdf`, look for `samples/submission_001/form.pdf.extracted.json`
+  - Look for a JSON sidecar file next to the input file: `{file_path}.mock.extracted.json`
+    - e.g., for `samples/submission_001/form.pdf`, look for `samples/submission_001/form.pdf.mock.extracted.json`
   - If the sidecar exists, read it and return `ExtractedDoc.model_validate_json(contents)`
   - If no sidecar, return `ExtractedDoc(source_path=str(file_path), content="", fields={}, confidence=0.0)` with a warning log
 
-### `samples/submission_001/form.pdf.extracted.json`
+### `samples/submission_001/form.pdf.mock.extracted.json`
 Create a realistic mock extraction result for an "Add Beneficiary" form:
 ```json
 {
@@ -55,7 +55,7 @@ Create a realistic mock extraction result for an "Add Beneficiary" form:
 }
 ```
 
-### `samples/submission_001/attachment.pdf.extracted.json`
+### `samples/submission_001/attachment.pdf.mock.extracted.json`
 Create a realistic mock extraction result for a marriage certificate:
 ```json
 {
@@ -68,7 +68,7 @@ Create a realistic mock extraction result for a marriage certificate:
 
 ### `tests/test_extraction.py`
 - Test `MockExtractor`:
-  - Create a temp directory with a sidecar `.extracted.json` file
+  - Create a temp directory with a sidecar `.mock.extracted.json` file
   - Call `extract()`, assert the returned `ExtractedDoc` matches the sidecar content
   - Test missing sidecar — should return empty content with confidence 0.0
 - Test `DocIntelligenceExtractor` construction (don't call Azure — just assert it can be instantiated with a fake endpoint)

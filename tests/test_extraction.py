@@ -12,7 +12,7 @@ class TestMockExtractor:
     async def test_extract_with_sidecar(self, tmp_path):
         doc = tmp_path / "form.pdf"
         doc.write_bytes(b"%PDF-1.4 placeholder")
-        sidecar = tmp_path / "form.pdf.extracted.json"
+        sidecar = tmp_path / "form.pdf.mock.extracted.json"
         sidecar.write_text(
             json.dumps(
                 {

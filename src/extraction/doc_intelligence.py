@@ -28,6 +28,10 @@ class DocIntelligenceExtractor(Extractor):
         result = await asyncio.to_thread(
             self._analyze, file_bytes, str(file_path)
         )
+        # Write sidecar JSON for debugging
+        sidecar_path = Path(str(file_path) + ".docintell.extracted.json")
+        sidecar_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        logger.info("Wrote extraction sidecar: %s", sidecar_path)
         return result
 
     def _analyze(self, file_bytes: bytes, source_path: str) -> ExtractedDoc:

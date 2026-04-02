@@ -19,7 +19,7 @@ from src.models import (
     ValidationResult,
 )
 from src.orchestrator import Orchestrator
-from src.result_writer import ResultWriter
+from src.result_writer import BlobResultWriter, ResultWriter
 from src.validators.base import BaseValidator
 from src.validators.registry import ValidatorRegistry
 
@@ -167,6 +167,59 @@ class TestResultWriter:
         for line in lines:
             parsed = json.loads(line)
             assert "submission_id" in parsed
+
+
+class TestBlobResultWriter:
+    def test_upload_calls_blob_client(self, tmp_path):
+        out = tmp_path / "results.jsonl"
+        out.write_text('{"submission_id":"s1"}\n')
+
+        mock_container = MagicMock()
+        mock_blob_service = MagicMock()
+        mock_blob_service.get_container_client.return_value = mock_container
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "src.result_writer.BlobServiceClient",
+                lambda account_url, credential: mock_blob_service,
+            )
+            mp.setattr(
+                "src.result_writer.DefaultAzureCredential",
+                MagicMock,
+            )
+            writer = BlobResultWriter(out, "https://fake.blob.core.windows.net", "my-container")
+            writer.upload()
+
+        mock_blob_service.get_container_client.assert_called_once_with("my-container")
+        mock_container.upload_blob.assert_called_once()
+        call_kwargs = mock_container.upload_blob.call_args
+        assert call_kwargs.kwargs["name"] == "results.jsonl"
+        assert call_kwargs.kwargs["overwrite"] is True
+
+    def test_write_then_upload(self, tmp_path):
+        out = tmp_path / "results.jsonl"
+
+        mock_container = MagicMock()
+        mock_blob_service = MagicMock()
+        mock_blob_service.get_container_client.return_value = mock_container
+
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(
+                "src.result_writer.BlobServiceClient",
+                lambda account_url, credential: mock_blob_service,
+            )
+            mp.setattr(
+                "src.result_writer.DefaultAzureCredential",
+                MagicMock,
+            )
+            writer = BlobResultWriter(out, "https://fake.blob.core.windows.net", "results")
+            writer.write(ValidationResult(
+                submission_id="s1", form_name="f", submitted_by="u", status="passed",
+            ))
+            writer.upload()
+
+        assert out.exists()
+        mock_container.upload_blob.assert_called_once()
 
 
 class TestPipeline:

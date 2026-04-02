@@ -1,6 +1,10 @@
-"""Writes ValidationResult objects to a JSONL file."""
+"""Writes ValidationResult objects to a JSONL file or Azure Blob Storage."""
 
+import io
 from pathlib import Path
+
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient
 
 from src.models import ValidationResult
 
@@ -27,3 +31,31 @@ class ResultWriter:
                 if line:
                     results.append(ValidationResult.model_validate_json(line))
         return results
+
+
+class BlobResultWriter(ResultWriter):
+    """Writes results to a local JSONL file and uploads it to Azure Blob Storage."""
+
+    def __init__(
+        self,
+        output_path: Path,
+        storage_account_url: str,
+        container_name: str,
+    ) -> None:
+        super().__init__(output_path)
+        credential = DefaultAzureCredential()
+        self._blob_service = BlobServiceClient(
+            account_url=storage_account_url, credential=credential
+        )
+        self._container_name = container_name
+        self._blob_name = output_path.name
+
+    def upload(self) -> None:
+        """Upload the local JSONL file to the configured blob container."""
+        container_client = self._blob_service.get_container_client(
+            self._container_name
+        )
+        with open(self._output_path, "rb") as f:
+            container_client.upload_blob(
+                name=self._blob_name, data=f, overwrite=True
+            )
