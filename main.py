@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from src.classification.attachment_classifier import AttachmentClassifier
 from src.classification.doc_type_config import load_doc_type_configs
-from src.classification.doc_type_rule_config import load_doc_type_rule_configs
+from src.classification.form_type_config import load_form_type_configs
 from src.classification.form_analyzer import FormAnalyzer
 from src.extraction.mock_extractor import MockExtractor
 from src.ingestion.local_folder import LocalFolderAdapter
@@ -38,8 +38,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to doc types config directory (default: config/doc_types/)",
     )
     parser.add_argument(
-        "--rules", "-r", default="config/doc_type_rules/",
-        help="Path to doc type rules config directory (default: config/doc_type_rules/)",
+        "--rules", "-r", default="config/form_types/",
+        help="Path to form types config directory (default: config/form_types/)",
     )
     parser.add_argument(
         "--mock", action="store_true",
@@ -62,7 +62,7 @@ async def run(args: argparse.Namespace) -> list[ValidationResult]:
     load_dotenv(override=True)
 
     doc_type_configs = load_doc_type_configs(Path(args.config))
-    doc_type_rule_configs = load_doc_type_rule_configs(Path(args.rules))
+    form_type_configs = load_form_type_configs(Path(args.rules))
 
     if args.mock:
         extractor = MockExtractor()
@@ -95,7 +95,7 @@ async def run(args: argparse.Namespace) -> list[ValidationResult]:
     deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 
     ingestion = LocalFolderAdapter(args.input)
-    form_analyzer = FormAnalyzer(client, deployment, doc_type_rule_configs)
+    form_analyzer = FormAnalyzer(client, deployment, form_type_configs)
     attachment_classifier = AttachmentClassifier(client, deployment, doc_type_configs)
     validator_registry = ValidatorRegistry.load(
         Path(args.config), client, deployment

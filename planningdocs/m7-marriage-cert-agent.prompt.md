@@ -1,7 +1,7 @@
 You are implementing Milestone 7 of a Document Validation System POC.
 
 ## Context
-This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-6 are complete — we have contracts, ingestion, extraction, form analyzer, attachment classifier, and a data-driven validator framework. The `LLMValidator` class (built in M6) reads validation rules from `config/doc_types/*.yaml` and builds GPT-4o prompts dynamically. The `config/doc_type_rules/*.yaml` files define required attachment types (`required_attachment_types`) and form-field validation rules (`form_validation_rules`) per life event.
+This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-6 are complete — we have contracts, ingestion, extraction, form analyzer, attachment classifier, and a data-driven validator framework. The `LLMValidator` class (built in M6) reads validation rules from `config/doc_types/*.yaml` and builds GPT-4o prompts dynamically. The `config/form_types/*.yaml` files define required attachment types (`required_attachment_types`) and form-field validation rules (`form_validation_rules`) per life event.
 
 ## Goal
 This milestone is now about **end-to-end validation testing** with the marriage certificate doc type. The `LLMValidator` and `config/doc_types/marriage_certificate.yaml` already exist. We need to:

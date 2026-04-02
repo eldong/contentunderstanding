@@ -10,27 +10,27 @@ from src.classification.attachment_classifier import (
     _build_classifier_prompt,
 )
 from src.classification.doc_type_config import DocTypeConfig
-from src.classification.doc_type_rule_config import DocTypeRuleConfig
+from src.classification.form_type_config import FormTypeConfig
 from src.classification.form_analyzer import FormAnalyzer, _build_system_prompt
 from src.models import ExtractedDoc
 
 
 SAMPLE_RULE_CONFIGS = [
-    DocTypeRuleConfig(
+    FormTypeConfig(
         doc_type="marriage",
         display_name="Marriage",
         description="Adding beneficiary due to marriage",
         required_attachment_types=["marriage_certificate"],
         form_validation_rules=["Beneficiary first name must be filled out"],
     ),
-    DocTypeRuleConfig(
+    FormTypeConfig(
         doc_type="birth",
         display_name="Birth",
         description="Adding beneficiary due to birth",
         required_attachment_types=["birth_certificate"],
         form_validation_rules=[],
     ),
-    DocTypeRuleConfig(
+    FormTypeConfig(
         doc_type="new_hire",
         display_name="New Hire",
         description="New hire enrollment",

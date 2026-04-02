@@ -3,7 +3,7 @@ You are implementing Milestone 5 of a Document Validation System POC.
 ## Context
 This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-4 are complete \u2014 we have Pydantic contracts, local ingestion, document extraction, and the `FormAnalyzer` with data-driven configs:
 - `config/doc_types/*.yaml` \u2014 attachment document types (indicators, validation rules)
-- `config/doc_type_rules/*.yaml` \u2014 life events (required attachment types, form-field validation rules)
+- `config/form_types/*.yaml` — life events (required attachment types, form-field validation rules)
 Now build the `AttachmentClassifier`.
 
 ## Goal

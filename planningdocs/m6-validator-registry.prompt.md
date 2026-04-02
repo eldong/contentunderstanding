@@ -3,14 +3,14 @@ You are implementing Milestone 6 of a Document Validation System POC.
 ## Context
 This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdocs/plan.md` for full architecture. Milestones 1-5 are complete — we have contracts, ingestion, extraction, form analyzer, and attachment classifier. Classification is data-driven via:
 - `config/doc_types/*.yaml` — attachment document types (indicators, validation rules)
-- `config/doc_type_rules/*.yaml` — life events (required attachment types, form-field validation rules)
+- `config/form_types/*.yaml` — life events (required attachment types, form-field validation rules)
 Now build the validator framework that uses the same config files.
 
 ## Goal
 Build the pluggable validator architecture: a `BaseValidator` ABC and a `ValidatorRegistry` that auto-discovers doc types from `config/doc_types/` and creates a generic `LLMValidator` for each. No per-type Python classes needed — validation rules come from the YAML config files.
 
 ## Data-Driven Design
-Instead of a separate `registry.yaml` and per-type validator classes, the registry auto-discovers `config/doc_types/*.yaml` files (already created in M4). Each file's `validation_rules` list drives a generic `LLMValidator` that builds a GPT-4o prompt from those rules. The `config/doc_type_rules/*.yaml` files define which attachment types are required per life event (`required_attachment_types`) and form-field validation rules (`form_validation_rules`). Adding a new validated type = adding a YAML file.
+Instead of a separate `registry.yaml` and per-type validator classes, the registry auto-discovers `config/doc_types/*.yaml` files (already created in M4). Each file's `validation_rules` list drives a generic `LLMValidator` that builds a GPT-4o prompt from those rules. The `config/form_types/*.yaml` files define which attachment types are required per life event (`required_attachment_types`) and form-field validation rules (`form_validation_rules`). Adding a new validated type = adding a YAML file.
 
 ## Files to Create
 

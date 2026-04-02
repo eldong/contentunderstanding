@@ -34,7 +34,7 @@ src/
   validators/            # Validate attachments against form requirements
 config/
   doc_types/             # YAML definitions for attachment document types
-  doc_type_rules/        # YAML definitions for life events / validation rules per reason
+  form_types/            # YAML definitions for life events / validation rules per reason
 samples/                 # Sample submission folders for development
 tests/                   # Automated tests (no Azure calls)
 ```
@@ -93,12 +93,12 @@ GPT-4o analyzes extracted form text to determine form type, life event reason, e
 
 Configuration is **data-driven** with two YAML folders:
 - `config/doc_types/` — defines attachment document types (indicators, validation rules)
-- `config/doc_type_rules/` — defines life events (required doc types, form-field validation rules)
+- `config/form_types/` — defines life events (required doc types, form-field validation rules)
 
 Reasons that need no attachments (e.g. `new_hire`) set `required_attachment_types: []` and only have `form_validation_rules`. Adding a new reason or document type means adding a YAML file; no Python code changes needed.
 
 ```bash
-pytest tests/test_classification.py tests/test_doc_type_config.py tests/test_doc_type_rule_config.py -v
+pytest tests/test_classification.py tests/test_doc_type_config.py tests/test_form_type_config.py -v
 ```
 
 ### M5: Attachment Classifier (complete)
@@ -143,7 +143,7 @@ CLI flags:
 - `--input` / `-i` — submissions folder (default: `samples/`)
 - `--output` / `-o` — results JSONL file (default: `results.jsonl`)
 - `--config` / `-c` — doc types config dir (default: `config/doc_types/`)
-- `--rules` / `-r` — doc type rules config dir (default: `config/doc_type_rules/`)
+- `--rules` / `-r` — form types config dir (default: `config/form_types/`)
 - `--mock` — use `MockExtractor` instead of Azure Document Intelligence
 
 ```bash
@@ -162,7 +162,7 @@ pytest tests/test_ingestion.py -v        # M2
 pytest tests/test_extraction.py -v       # M3
 pytest tests/test_classification.py -v   # M4
 pytest tests/test_doc_type_config.py -v  # M4 doc type configs
-pytest tests/test_doc_type_rule_config.py -v  # M4 doc type rules
+pytest tests/test_form_type_config.py -v  # M4 form types
 pytest tests/test_validators.py -v        # M6
 pytest tests/test_validators.py::TestMarriageCertificateValidation -v  # M7
 pytest tests/test_pipeline.py -v          # M8

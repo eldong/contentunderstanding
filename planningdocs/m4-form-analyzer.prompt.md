@@ -9,9 +9,9 @@ Build the `FormAnalyzer` class that uses Azure OpenAI GPT-4o to analyze extracte
 ## Data-Driven Design
 Document types and rules are defined in YAML files under two directories:
 - `config/doc_types/` — attachment document types (indicators, validation rules)
-- `config/doc_type_rules/` — life events / form types (required attachment types, form-field validation rules)
+- `config/form_types/` — life events / form types (required attachment types, form-field validation rules)
 
-The form analyzer reads `DocTypeRuleConfig` objects from `config/doc_type_rules/` to learn what form types exist. Adding a new type means adding a YAML file — no code changes.
+The form analyzer reads `FormTypeConfig` objects from `config/form_types/` to learn what form types exist. Adding a new type means adding a YAML file — no code changes.
 
 ## Files to Create
 
@@ -30,7 +30,7 @@ validation_rules:
   - "The document must appear to be an official government-issued certificate"
 ```
 
-### `config/doc_type_rules/marriage.yaml`
+### `config/form_types/marriage.yaml`
 ```yaml
 doc_type: marriage
 display_name: Marriage
@@ -42,7 +42,7 @@ form_validation_rules:
   - "The marriage checkbox or reason must be selected on the form"
 ```
 
-### `config/doc_type_rules/new_hire.yaml`
+### `config/form_types/new_hire.yaml`
 ```yaml
 doc_type: new_hire
 display_name: New Hire
@@ -67,14 +67,14 @@ form_validation_rules:
   - Returns list of all loaded configs
   - Logs a warning and skips any file that fails validation
 
-### `src/classification/doc_type_rule_config.py`
-- `DocTypeRuleConfig` — a Pydantic model that represents one doc type rule definition:
+### `src/classification/form_type_config.py`
+- `FormTypeConfig` — a Pydantic model that represents one form type definition:
   - `doc_type: str`
   - `display_name: str`
   - `description: str`
   - `required_attachment_types: list[str]` (defaults to empty)
   - `form_validation_rules: list[str]` (defaults to empty)
-- Function: `load_doc_type_rule_configs(config_dir: Path) -> list[DocTypeRuleConfig]`
+- Function: `load_form_type_configs(config_dir: Path) -> list[FormTypeConfig]`
   - Reads all `*.yaml` files in `config_dir`
   - Validates each against the Pydantic model
   - Returns list of all loaded configs
@@ -84,10 +84,10 @@ form_validation_rules:
 - `FormAnalyzer` class — constructor takes:
   - `client: openai.AsyncAzureOpenAI`
   - `deployment: str`
-  - `doc_type_rule_configs: list[DocTypeRuleConfig]`
+  - `form_type_configs: list[FormTypeConfig]`
 - Method: `async analyze(extracted: ExtractedDoc) -> FormAnalysisResult`
 - Implementation:
-  1. Build the system prompt dynamically from `doc_type_rule_configs`:
+  1. Build the system prompt dynamically from `form_type_configs`:
      - Collect all `doc_type` values from the configs → these are the valid reasons/types
      - The core prompt instructs the LLM to determine form type, reason, names, and relevance
      - The valid reasons list is injected into the prompt
@@ -126,7 +126,7 @@ form_validation_rules:
 - Verify `response_format` is set to `{"type": "json_object"}`
 - Use `pytest.mark.asyncio` for all tests
 - Use `unittest.mock.AsyncMock` for mocking the async OpenAI client
-- Create `DocTypeRuleConfig` test fixtures directly (don't load from actual YAML in unit tests)
+- Create `FormTypeConfig` test fixtures directly (don't load from actual YAML in unit tests)
 
 ### `tests/test_doc_type_config.py`
 - Test `load_doc_type_configs`:
@@ -134,9 +134,9 @@ form_validation_rules:
   - Test invalid YAML is skipped with a warning
   - Test empty directory returns empty list
 
-### `tests/test_doc_type_rule_config.py`
-- Test `load_doc_type_rule_configs`:
-  - Create temp YAML files in `tmp_path`, call `load_doc_type_rule_configs()`, assert correct parsing
+### `tests/test_form_type_config.py`
+- Test `load_form_type_configs`:
+  - Create temp YAML files in `tmp_path`, call `load_form_type_configs()`, assert correct parsing
   - Test invalid YAML is skipped with a warning
   - Test empty directory returns empty list
   - Test configs with `required_attachment_types: []`

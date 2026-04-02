@@ -8,7 +8,7 @@ import pytest
 
 from src.classification.attachment_classifier import AttachmentClassifier
 from src.classification.doc_type_config import DocTypeConfig
-from src.classification.doc_type_rule_config import DocTypeRuleConfig
+from src.classification.form_type_config import FormTypeConfig
 from src.classification.form_analyzer import FormAnalyzer
 from src.extraction.mock_extractor import MockExtractor
 from src.models import (

@@ -139,6 +139,7 @@ class Orchestrator:
                         submission_id=submission.submission_id,
                         form_name=form_analysis.form_type,
                         submitted_by=submission.submitted_by,
+                        doc_type=classification.doc_type,
                         status="failed",
                         reasons=[
                             f"No validator registered for document type "
@@ -159,6 +160,7 @@ class Orchestrator:
                         submission_id=submission.submission_id,
                         form_name=form_analysis.form_type,
                         submitted_by=submission.submitted_by,
+                        doc_type=classification.doc_type,
                         status="error",
                         reasons=[f"Validation failed for {att_path}: {exc}"],
                     )
@@ -169,6 +171,7 @@ class Orchestrator:
                 result.submission_id = submission.submission_id
                 result.submitted_by = submission.submitted_by
                 result.form_name = form_analysis.form_type
+                result.doc_type = classification.doc_type
 
                 self._result_writer.write(result)
                 results.append(result)

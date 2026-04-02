@@ -2,7 +2,7 @@
 
 from openai import AsyncAzureOpenAI
 
-from src.classification.doc_type_rule_config import DocTypeRuleConfig
+from src.classification.form_type_config import FormTypeConfig
 from src.models import ExtractedDoc, FormAnalysisResult
 
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -29,9 +29,9 @@ Return ONLY valid JSON matching this exact schema:
 }}"""
 
 
-def _build_system_prompt(doc_type_rule_configs: list[DocTypeRuleConfig]) -> str:
-    """Build the system prompt with valid doc types from all doc type rule configs."""
-    types_sorted = sorted(c.doc_type for c in doc_type_rule_configs)
+def _build_system_prompt(form_type_configs: list[FormTypeConfig]) -> str:
+    """Build the system prompt with valid doc types from all form type configs."""
+    types_sorted = sorted(c.doc_type for c in form_type_configs)
     reasons_list = ", ".join(types_sorted)
     reasons_enum = " | ".join(f'"{ r}"' for r in types_sorted) + " | null"
     return SYSTEM_PROMPT_TEMPLATE.format(
@@ -47,11 +47,11 @@ class FormAnalyzer:
         self,
         client: AsyncAzureOpenAI,
         deployment: str,
-        doc_type_rule_configs: list[DocTypeRuleConfig],
+        form_type_configs: list[FormTypeConfig],
     ) -> None:
         self._client = client
         self._deployment = deployment
-        self._system_prompt = _build_system_prompt(doc_type_rule_configs)
+        self._system_prompt = _build_system_prompt(form_type_configs)
 
     async def analyze(self, extracted: ExtractedDoc) -> FormAnalysisResult:
         response = await self._client.chat.completions.create(
