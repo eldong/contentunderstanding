@@ -107,9 +107,9 @@ class TestValidationResult:
             submission_id="SUB-001",
             form_name="Add Beneficiary",
             submitted_by="Jane",
-            status="pass",
+            status="passed",
         )
-        assert result.status == "pass"
+        assert result.status == "passed"
         assert result.reasons == []
         assert result.timestamp  # auto-generated
 
@@ -118,7 +118,7 @@ class TestValidationResult:
             submission_id="SUB-001",
             form_name="Add Beneficiary",
             submitted_by="Jane",
-            status="fail",
+            status="failed",
             reasons=["Employee name not found", "Date too old"],
         )
         assert len(result.reasons) == 2
@@ -137,10 +137,10 @@ class TestValidationResult:
             submission_id="SUB-001",
             form_name="Add Beneficiary",
             submitted_by="Jane",
-            status="skip",
+            status="error",
             reasons=["Form not relevant"],
         )
         data = result.model_dump_json()
         restored = ValidationResult.model_validate_json(data)
-        assert restored.status == "skip"
+        assert restored.status == "error"
         assert restored.reasons == ["Form not relevant"]

@@ -74,6 +74,6 @@ class LLMValidator(BaseValidator):
             submission_id="",
             form_name=str(attachment_extracted.source_path),
             submitted_by="",
-            status="pass" if not failed_reasons else "fail",
+            status="passed" if not failed_reasons else "failed",
             reasons=failed_reasons,
         )

@@ -1,0 +1,15 @@
+doc_type: birth_certificate
+display_name: Birth Certificate
+description: "Official government-issued certificate of birth"
+indicators:
+  - "certificate of birth"
+  - "certificate of live birth"
+  - "birth record"
+  - "born on"
+  - "department of vital statistics"
+  - "registrar of vital statistics"
+  - "birth registration"
+validation_rules:
+  - "The child's name on the certificate must match the dependent name on the form"
+  - "The birth date must be recent (within the last 12 months) unless adding an existing child"
+  - "The document must appear to be an official government-issued certificate"

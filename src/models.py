@@ -53,6 +53,6 @@ class ValidationResult(BaseModel):
     submission_id: str
     form_name: str
     submitted_by: str
-    status: Literal["pass", "fail", "skip"]
+    status: Literal["passed", "failed", "error"]
     reasons: list[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

@@ -49,17 +49,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _print_summary(results: list[ValidationResult]) -> None:
-    passed = sum(1 for r in results if r.status == "pass")
-    failed = sum(1 for r in results if r.status == "fail")
-    skipped = sum(1 for r in results if r.status == "skip")
+    passed = sum(1 for r in results if r.status == "passed")
+    failed = sum(1 for r in results if r.status == "failed")
+    errors = sum(1 for r in results if r.status == "error")
     total = len(results)
     print(f"\n{'='*50}")
-    print(f"Results: {total} total — {passed} pass, {failed} fail, {skipped} skip")
+    print(f"Results: {total} total — {passed} passed, {failed} failed, {errors} error")
     print(f"{'='*50}")
 
 
 async def run(args: argparse.Namespace) -> list[ValidationResult]:
-    load_dotenv()
+    load_dotenv(override=True)
 
     doc_type_configs = load_doc_type_configs(Path(args.config))
     doc_type_rule_configs = load_doc_type_rule_configs(Path(args.rules))
@@ -86,10 +86,11 @@ async def run(args: argparse.Namespace) -> list[ValidationResult]:
 
     credential = DefaultAzureCredential()
     token = credential.get_token("https://cognitiveservices.azure.com/.default")
+    api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
     client = AsyncAzureOpenAI(
         azure_endpoint=openai_endpoint,
         api_key=token.token,
-        api_version="2024-12-01-preview",
+        api_version=api_version,
     )
     deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 

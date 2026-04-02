@@ -105,7 +105,7 @@ def _make_mock_classifier(doc_type: str, confidence: float = 0.95) -> MagicMock:
     return classifier
 
 
-def _make_mock_validator(status: str = "pass", reasons: list[str] | None = None) -> MagicMock:
+def _make_mock_validator(status: str = "passed", reasons: list[str] | None = None) -> MagicMock:
     validator = MagicMock()
 
     async def _validate(form_analysis, att_extracted):
@@ -136,7 +136,7 @@ class TestResultWriter:
             submission_id="sub_001",
             form_name="add_beneficiary",
             submitted_by="Jane",
-            status="pass",
+            status="passed",
             reasons=[],
         )
         writer.write(result)
@@ -155,11 +155,11 @@ class TestResultWriter:
         writer = ResultWriter(out)
         writer.write(ValidationResult(
             submission_id="s1", form_name="f", submitted_by="u",
-            status="pass",
+            status="passed",
         ))
         writer.write(ValidationResult(
             submission_id="s2", form_name="f", submitted_by="u",
-            status="fail", reasons=["bad"],
+            status="failed", reasons=["bad"],
         ))
 
         lines = out.read_text().strip().split("\n")
@@ -175,7 +175,7 @@ class TestPipeline:
         submission = _make_submission(
             attachment_paths=["samples/sub_001/cert.pdf"]
         )
-        validator = _make_mock_validator(status="pass")
+        validator = _make_mock_validator(status="passed")
         registry = _make_mock_registry({"marriage_certificate": validator})
 
         orchestrator = Orchestrator(
@@ -190,7 +190,7 @@ class TestPipeline:
         results = await orchestrator.run()
 
         assert len(results) == 1
-        assert results[0].status == "pass"
+        assert results[0].status == "passed"
         assert results[0].submission_id == "sub_001"
         assert results[0].submitted_by == "John Doe"
 
@@ -212,8 +212,8 @@ class TestPipeline:
         results = await orchestrator.run()
 
         assert len(results) == 1
-        assert results[0].status == "skip"
-        assert "not relevant" in results[0].reasons[0]
+        assert results[0].status == "error"
+        assert "No matching form type" in results[0].reasons[0]
 
     @pytest.mark.asyncio
     async def test_fail_no_validator(self, tmp_path):
@@ -233,7 +233,7 @@ class TestPipeline:
         results = await orchestrator.run()
 
         assert len(results) == 1
-        assert results[0].status == "fail"
+        assert results[0].status == "failed"
         assert "No validator registered" in results[0].reasons[0]
 
     @pytest.mark.asyncio
@@ -242,7 +242,7 @@ class TestPipeline:
             attachment_paths=["samples/sub_001/cert.pdf"]
         )
         validator = _make_mock_validator(
-            status="fail", reasons=["Names do not match", "Date too old"]
+            status="failed", reasons=["Names do not match", "Date too old"]
         )
         registry = _make_mock_registry({"marriage_certificate": validator})
 
@@ -258,7 +258,7 @@ class TestPipeline:
         results = await orchestrator.run()
 
         assert len(results) == 1
-        assert results[0].status == "fail"
+        assert results[0].status == "failed"
         assert "Names do not match" in results[0].reasons
         assert "Date too old" in results[0].reasons
 
@@ -277,7 +277,7 @@ class TestPipeline:
                 submitted_by="Alice",
             ),
         ]
-        validator = _make_mock_validator(status="pass")
+        validator = _make_mock_validator(status="passed")
         registry = _make_mock_registry({"marriage_certificate": validator})
 
         out = tmp_path / "results.jsonl"
@@ -324,7 +324,7 @@ class TestPipeline:
         submission = _make_submission(
             attachment_paths=["samples/sub_001/cert.pdf"]
         )
-        validator = _make_mock_validator(status="pass")
+        validator = _make_mock_validator(status="passed")
         registry = _make_mock_registry({"marriage_certificate": validator})
 
         out = tmp_path / "results.jsonl"
@@ -342,5 +342,103 @@ class TestPipeline:
         lines = out.read_text().strip().split("\n")
         assert len(lines) == 1
         parsed = json.loads(lines[0])
-        assert parsed["status"] == "pass"
+        assert parsed["status"] == "passed"
         assert parsed["submission_id"] == "sub_001"
+
+    @pytest.mark.asyncio
+    async def test_form_extraction_error(self, tmp_path):
+        submission = _make_submission(
+            attachment_paths=["samples/sub_001/cert.pdf"]
+        )
+        extractor = AsyncMock()
+        extractor.extract = AsyncMock(side_effect=Exception("corrupt file"))
+
+        orchestrator = Orchestrator(
+            ingestion=_make_mock_ingestion([submission]),
+            extractor=extractor,
+            form_analyzer=_make_mock_form_analyzer(RELEVANT_FORM),
+            attachment_classifier=_make_mock_classifier("marriage_certificate"),
+            validator_registry=_make_mock_registry(),
+            result_writer=ResultWriter(tmp_path / "results.jsonl"),
+        )
+
+        results = await orchestrator.run()
+
+        assert len(results) == 1
+        assert results[0].status == "error"
+        assert "Form extraction failed" in results[0].reasons[0]
+        assert results[0].submission_id == "sub_001"
+
+    @pytest.mark.asyncio
+    async def test_attachment_extraction_error(self, tmp_path):
+        submission = _make_submission(
+            attachment_paths=["samples/sub_001/cert.pdf"]
+        )
+        call_count = 0
+
+        async def _extract_side_effect(path):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return FORM_EXTRACTED  # form succeeds
+            raise Exception("unsupported format")
+
+        extractor = AsyncMock()
+        extractor.extract = _extract_side_effect
+
+        orchestrator = Orchestrator(
+            ingestion=_make_mock_ingestion([submission]),
+            extractor=extractor,
+            form_analyzer=_make_mock_form_analyzer(RELEVANT_FORM),
+            attachment_classifier=_make_mock_classifier("marriage_certificate"),
+            validator_registry=_make_mock_registry({"marriage_certificate": _make_mock_validator()}),
+            result_writer=ResultWriter(tmp_path / "results.jsonl"),
+        )
+
+        results = await orchestrator.run()
+
+        assert len(results) == 1
+        assert results[0].status == "error"
+        assert "Attachment extraction failed" in results[0].reasons[0]
+
+    @pytest.mark.asyncio
+    async def test_error_does_not_stop_other_submissions(self, tmp_path):
+        submissions = [
+            _make_submission(submission_id="bad", form_path="samples/bad/form.pdf"),
+            _make_submission(
+                submission_id="good",
+                form_path="samples/good/form.pdf",
+                attachment_paths=["samples/good/cert.pdf"],
+            ),
+        ]
+        call_count = 0
+
+        async def _extract_side_effect(path):
+            nonlocal call_count
+            call_count += 1
+            if "bad" in str(path):
+                raise Exception("corrupt")
+            return FORM_EXTRACTED if "form" in str(path).lower() else ATTACHMENT_EXTRACTED
+
+        extractor = AsyncMock()
+        extractor.extract = _extract_side_effect
+
+        validator = _make_mock_validator(status="passed")
+        registry = _make_mock_registry({"marriage_certificate": validator})
+
+        orchestrator = Orchestrator(
+            ingestion=_make_mock_ingestion(submissions),
+            extractor=extractor,
+            form_analyzer=_make_mock_form_analyzer(RELEVANT_FORM),
+            attachment_classifier=_make_mock_classifier("marriage_certificate"),
+            validator_registry=registry,
+            result_writer=ResultWriter(tmp_path / "results.jsonl"),
+        )
+
+        results = await orchestrator.run()
+
+        assert len(results) == 2
+        assert results[0].status == "error"
+        assert results[0].submission_id == "bad"
+        assert results[1].status == "passed"
+        assert results[1].submission_id == "good"

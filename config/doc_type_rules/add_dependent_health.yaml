@@ -1,0 +1,12 @@
+doc_type: add_dependent_health
+display_name: Health Insurance Dependent Addition Form
+description: "Form for adding a dependent (spouse or child) to employee health insurance coverage"
+required_attachment_types:
+  - marriage_certificate
+  - birth_certificate
+form_validation_rules:
+  - "The employee name must be filled out on the form"
+  - "The dependent name must be filled out on the form"
+  - "A relationship must be selected (spouse or child)"
+  - "If spouse is selected, a marriage certificate attachment is required"
+  - "If child is selected, a birth certificate attachment is required"

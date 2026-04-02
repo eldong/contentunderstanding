@@ -75,7 +75,7 @@ class TestLLMValidator:
 
         result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
 
-        assert result.status == "pass"
+        assert result.status == "passed"
         assert result.reasons == []
 
     @pytest.mark.asyncio
@@ -92,7 +92,7 @@ class TestLLMValidator:
 
         result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 2
         assert "Date is 3 years ago" in result.reasons
         assert "No seal found" in result.reasons
@@ -278,7 +278,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "pass"
+        assert result.status == "passed"
         assert result.reasons == []
 
     @pytest.mark.asyncio
@@ -295,7 +295,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "Jane Smith" in result.reasons[0]
 
@@ -313,7 +313,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "Michael" in result.reasons[0]
 
@@ -331,7 +331,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "older than 12 months" in result.reasons[0]
 
@@ -349,7 +349,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 1
         assert "seal" in result.reasons[0].lower() or "government" in result.reasons[0].lower()
 
@@ -367,7 +367,7 @@ class TestMarriageCertificateValidation:
 
         result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
 
-        assert result.status == "fail"
+        assert result.status == "failed"
         assert len(result.reasons) == 3
 
     @pytest.mark.asyncio
