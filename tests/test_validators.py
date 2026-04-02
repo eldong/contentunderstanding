@@ -31,6 +31,7 @@ SAMPLE_FORM_ANALYSIS = FormAnalysisResult(
     employee_first_name="Jane",
     employee_last_name="Smith",
     beneficiary_first_name="Michael",
+    application_date="2026-03-15",
     is_relevant=True,
 )
 
@@ -70,7 +71,7 @@ class TestLLMValidator:
         response = {
             "results": [
                 {"rule": "names match", "passed": True, "reason": "Names match form", "date_check": None},
-                {"rule": "marriage date within 12 months", "passed": True, "reason": "extracted date", "date_check": {"extracted_date": "2026-02-14", "window": "12 months"}},
+                {"rule": "marriage date within 12 months", "passed": True, "reason": "extracted date", "date_check": {"extracted_date": "2026-02-14", "reference_date": "2026-03-15", "window": "12 months"}},
                 {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
@@ -94,7 +95,7 @@ class TestLLMValidator:
         response = {
             "results": [
                 {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
-                {"rule": "date within 12 months", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "date within 12 months", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "reference_date": "2026-03-15", "window": "12 months"}},
                 {"rule": "official doc", "passed": False, "reason": "No seal found", "date_check": None},
             ]
         }
@@ -256,6 +257,7 @@ MARRIAGE_FORM = FormAnalysisResult(
     employee_first_name="Jane",
     employee_last_name="Smith",
     beneficiary_first_name="Michael",
+    application_date="2026-03-25",
     is_relevant=True,
 )
 
@@ -285,7 +287,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": True, "reason": "Jane Smith and Michael appear on certificate", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": True, "reason": "Contains state seal and officiant", "date_check": None},
             ]
         }
@@ -309,7 +311,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": False, "reason": "Employee name Jane Smith not found on certificate", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
@@ -331,7 +333,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": False, "reason": "Beneficiary name Michael does not appear on certificate", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
@@ -353,7 +355,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": True, "reason": "Appears official", "date_check": None},
             ]
         }
@@ -377,7 +379,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": True, "reason": "Names match", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2026-03-15", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": False, "reason": "No government seal or letterhead found", "date_check": None},
             ]
         }
@@ -399,7 +401,7 @@ class TestMarriageCertificateValidation:
         response = {
             "results": [
                 {"rule": "names match", "passed": False, "reason": "No matching names found", "date_check": None},
-                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "window": "12 months"}},
+                {"rule": "date recent", "passed": True, "reason": "extracted", "date_check": {"extracted_date": "2020-01-10", "reference_date": "2026-03-25", "window": "12 months"}},
                 {"rule": "official doc", "passed": False, "reason": "Document appears to be a photocopy", "date_check": None},
             ]
         }

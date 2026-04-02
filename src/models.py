@@ -36,6 +36,7 @@ class FormAnalysisResult(BaseModel):
     employee_first_name: str | None = None
     employee_last_name: str | None = None
     beneficiary_first_name: str | None = None
+    application_date: str | None = None  # e.g. "2026-01-25" (YYYY-MM-DD)
     is_relevant: bool = False
 
 

@@ -16,6 +16,7 @@ You are verifying a "{display_name}" attachment against the submitted form.
 
 Employee name from form: {employee_first_name} {employee_last_name}
 Beneficiary name from form: {beneficiary_first_name}
+Application date from form: {application_date}
 Today's date: {today_date}
 
 Validate the following rules against the attachment text:
@@ -25,10 +26,10 @@ For each rule, determine if it passes or fails.
 
 If a rule involves checking whether a date falls within a time window
 (e.g. "must be within the last 12 months"), you MUST include a "date_check"
-object with the extracted date and the required window. The system will
-verify the date comparison programmatically — do NOT decide pass/fail
-for date-window rules yourself. Set "passed" to true as a placeholder
-for those rules.
+object with the extracted date, the required window, and the reference date
+that the window is measured from. The system will verify the date comparison
+programmatically — do NOT decide pass/fail for date-window rules yourself.
+Set "passed" to true as a placeholder for those rules.
 
 Return ONLY valid JSON:
 {{
@@ -45,12 +46,17 @@ Return ONLY valid JSON:
       "reason": "extracted date for programmatic check",
       "date_check": {{
         "extracted_date": "YYYY-MM-DD",
+        "reference_date": "YYYY-MM-DD",
         "window": "N units"
       }}
     }}
   ]
 }}
 
+The "date_check.extracted_date" is the date found on the attachment document.
+The "date_check.reference_date" is the date the window is measured from. Use
+the application date from the form if the rule references it; otherwise use
+today's date.
 The "date_check.window" field must use the format "<number> <unit>" where
 unit is one of: days, weeks, months, years. Example: "12 months".
 Set "date_check" to null for rules that do not involve date-window checks."""
@@ -93,11 +99,13 @@ class LLMValidator(BaseValidator):
     ) -> ValidationResult:
         rules_text = "\n".join(f"- {r}" for r in self._config.validation_rules)
         today = date.today()
+        application_date_str = form_analysis.application_date or today.isoformat()
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             display_name=self._config.display_name,
             employee_first_name=form_analysis.employee_first_name or "",
             employee_last_name=form_analysis.employee_last_name or "",
             beneficiary_first_name=form_analysis.beneficiary_first_name or "",
+            application_date=application_date_str,
             today_date=today.isoformat(),
             rules=rules_text,
         )
@@ -122,6 +130,7 @@ class LLMValidator(BaseValidator):
                 # Override LLM pass/fail with deterministic Python date math
                 date_str = date_check.get("extracted_date")
                 window_str = date_check.get("window")
+                ref_str = date_check.get("reference_date")
                 if not date_str:
                     failed_reasons.append(
                         f"Could not extract a date for rule: {r['rule']}"
@@ -135,26 +144,33 @@ class LLMValidator(BaseValidator):
                     )
                     continue
                 try:
+                    ref_date = date.fromisoformat(ref_str) if ref_str else today
+                except ValueError:
+                    ref_date = today
+                try:
                     window = _parse_duration(window_str)
                 except (ValueError, TypeError):
                     failed_reasons.append(
                         f"Could not parse time window '{window_str}' for rule: {r['rule']}"
                     )
                     continue
-                cutoff = today - window
-                if event_date > today:
+                cutoff = ref_date - window
+                if event_date > ref_date:
                     failed_reasons.append(
-                        f"The date {event_date.isoformat()} is in the future"
+                        f"The date {event_date.isoformat()} is after the "
+                        f"application date {ref_date.isoformat()}"
                     )
                 elif event_date < cutoff:
                     failed_reasons.append(
                         f"The date {event_date.isoformat()} is not within the last "
-                        f"{window_str} (cutoff: {cutoff.isoformat()})"
+                        f"{window_str} of {ref_date.isoformat()} "
+                        f"(cutoff: {cutoff.isoformat()})"
                     )
                 else:
                     passed_reasons.append(
                         f"The date {event_date.isoformat()} is within the last "
-                        f"{window_str} (cutoff: {cutoff.isoformat()})"
+                        f"{window_str} of {ref_date.isoformat()} "
+                        f"(cutoff: {cutoff.isoformat()})"
                     )
             elif not r["passed"]:
                 failed_reasons.append(r["reason"])
