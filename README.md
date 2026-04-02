@@ -108,14 +108,47 @@ GPT-4o classifies attachment documents into registered doc types (or `"unknown"`
 pytest tests/test_classification.py::TestAttachmentClassifier -v
 ```
 
-### M6: Validator Registry
-_Coming soon_ — YAML-driven registry maps document types to validators.
+### M6: Validator Registry (complete)
+YAML-driven validator framework with three components:
+- `BaseValidator` — abstract interface for all validators
+- `LLMValidator` — generic GPT-4o validator driven by `validation_rules` from `config/doc_types/` configs. Builds a prompt with employee/beneficiary names and validation rules, sends attachment text, parses pass/fail results.
+- `ValidatorRegistry` — auto-discovers doc-type configs and creates an `LLMValidator` per type. Lookup by `doc_type`, no per-type Python classes needed.
 
-### M7: Marriage Certificate Validator
-_Coming soon_ — First concrete validator using GPT-4o.
+```bash
+pytest tests/test_validators.py -v
+```
 
-### M8: Orchestrator & CLI
-_Coming soon_ — End-to-end pipeline with CLI interface.
+### M7: Marriage Certificate Validation (complete)
+End-to-end validation testing for the marriage certificate doc type. Verifies the `LLMValidator` with the real `config/doc_types/marriage_certificate.yaml` rules across 8 scenarios: all-pass, employee name mismatch, beneficiary name mismatch, date too old, unofficial document, multiple failures, prompt rule inclusion, and prompt form-data inclusion. No marriage-specific Python code — the generic `LLMValidator` handles everything via YAML config.
+
+```bash
+pytest tests/test_validators.py::TestMarriageCertificateValidation -v
+```
+
+### M8: Orchestrator & CLI (complete)
+End-to-end pipeline wiring all components together:
+- `ResultWriter` — appends `ValidationResult` objects as JSON lines (JSONL format)
+- `Orchestrator` — runs the full pipeline: ingestion → extraction → form analysis → attachment classification → validation. Contains zero doc-type-specific logic; routes entirely via classifier + registry.
+- `main.py` — CLI entry point with `argparse`
+
+```bash
+# Run with mock extraction (no Azure Doc Intelligence needed)
+python main.py --mock --input samples/ --output results.jsonl
+
+# Run with real Azure services
+python main.py --input samples/ --output results.jsonl
+```
+
+CLI flags:
+- `--input` / `-i` — submissions folder (default: `samples/`)
+- `--output` / `-o` — results JSONL file (default: `results.jsonl`)
+- `--config` / `-c` — doc types config dir (default: `config/doc_types/`)
+- `--rules` / `-r` — doc type rules config dir (default: `config/doc_type_rules/`)
+- `--mock` — use `MockExtractor` instead of Azure Document Intelligence
+
+```bash
+pytest tests/test_pipeline.py -v
+```
 
 ## Running Tests
 
@@ -130,4 +163,7 @@ pytest tests/test_extraction.py -v       # M3
 pytest tests/test_classification.py -v   # M4
 pytest tests/test_doc_type_config.py -v  # M4 doc type configs
 pytest tests/test_doc_type_rule_config.py -v  # M4 doc type rules
+pytest tests/test_validators.py -v        # M6
+pytest tests/test_validators.py::TestMarriageCertificateValidation -v  # M7
+pytest tests/test_pipeline.py -v          # M8
 ```
