@@ -26,8 +26,8 @@ Document Validation System POC — validates HR submissions (form PDF + supporti
 - **Doc types** (`config/doc_types/`): Each YAML defines an attachment document type (e.g., `marriage_certificate.yaml`)
   - Fields: `doc_type`, `display_name`, `description`, `indicators`, `validation_rules`
 - **Doc type rules** (`config/doc_type_rules/`): Each YAML defines a life event / reason (e.g., `marriage.yaml`)
-  - Fields: `reason`, `display_name`, `description`, `required_doc_types`, `form_validation_rules`
-  - Reasons with no attachments (e.g. `new_hire`) set `required_doc_types: []`
+  - Fields: `doc_type`, `display_name`, `description`, `required_attachment_types`, `form_validation_rules`
+  - Reasons with no attachments (e.g. `new_hire`) set `required_attachment_types: []`
 - Adding a new type or reason = adding a YAML file. No Python code changes needed.
 - `FormAnalyzer` builds its prompt dynamically from all loaded `DocTypeRuleConfig`s
 - `AttachmentClassifier` builds its prompt from all loaded `DocTypeConfig`s

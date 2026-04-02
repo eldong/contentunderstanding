@@ -95,14 +95,18 @@ Configuration is **data-driven** with two YAML folders:
 - `config/doc_types/` — defines attachment document types (indicators, validation rules)
 - `config/doc_type_rules/` — defines life events (required doc types, form-field validation rules)
 
-Reasons that need no attachments (e.g. `new_hire`) set `required_doc_types: []` and only have `form_validation_rules`. Adding a new reason or document type means adding a YAML file; no Python code changes needed.
+Reasons that need no attachments (e.g. `new_hire`) set `required_attachment_types: []` and only have `form_validation_rules`. Adding a new reason or document type means adding a YAML file; no Python code changes needed.
 
 ```bash
 pytest tests/test_classification.py tests/test_doc_type_config.py tests/test_doc_type_rule_config.py -v
 ```
 
-### M5: Attachment Classifier
-_Coming soon_ — GPT-4o classifies attachment documents.
+### M5: Attachment Classifier (complete)
+GPT-4o classifies attachment documents into registered doc types (or `"unknown"`). The `AttachmentClassifier` builds its prompt dynamically from `config/doc_types/` configs — doc types, descriptions, and indicators. Returns `ClassifierResponse` with `doc_type`, `confidence`, and `reasoning`.
+
+```bash
+pytest tests/test_classification.py::TestAttachmentClassifier -v
+```
 
 ### M6: Validator Registry
 _Coming soon_ — YAML-driven registry maps document types to validators.

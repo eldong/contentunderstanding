@@ -1,7 +1,7 @@
-reason: new_hire
+doc_type: new_hire
 display_name: New Hire
 description: "Employee is enrolling beneficiaries as part of new hire onboarding"
-required_doc_types: []
+required_attachment_types: []
 form_validation_rules:
   - "Employee hire date or effective date must be filled out"
   - "The new hire checkbox or reason must be selected on the form"

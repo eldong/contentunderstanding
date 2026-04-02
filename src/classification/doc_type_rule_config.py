@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 class DocTypeRuleConfig(BaseModel):
     """Schema for a document type rule definition YAML file."""
 
-    reason: str
+    doc_type: str
     display_name: str
     description: str
-    required_doc_types: list[str] = Field(default_factory=list)
+    required_attachment_types: list[str] = Field(default_factory=list)
     form_validation_rules: list[str] = Field(default_factory=list)
 
 

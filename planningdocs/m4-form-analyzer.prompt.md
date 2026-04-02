@@ -7,7 +7,11 @@ This is a Python project at `c:\work\opm\contentunderstanding`. See `planningdoc
 Build the `FormAnalyzer` class that uses Azure OpenAI GPT-4o to analyze extracted form text. The analyzer dynamically loads document type definitions from `config/doc_types/*.yaml` files to build its prompt. Returns a `FormAnalysisResult` from `src/models.py`.
 
 ## Data-Driven Design
-Document types are defined in YAML files under `config/doc_types/`. The form analyzer reads these at construction time to learn what form types and reasons exist. Adding a new type means adding a YAML file — no code changes.
+Document types and rules are defined in YAML files under two directories:
+- `config/doc_types/` — attachment document types (indicators, validation rules)
+- `config/doc_type_rules/` — life events / form types (required attachment types, form-field validation rules)
+
+The form analyzer reads `DocTypeRuleConfig` objects from `config/doc_type_rules/` to learn what form types exist. Adding a new type means adding a YAML file — no code changes.
 
 ## Files to Create
 
@@ -16,8 +20,6 @@ Document types are defined in YAML files under `config/doc_types/`. The form ana
 doc_type: marriage_certificate
 display_name: Marriage Certificate
 description: "Official government-issued certificate or license of marriage"
-required_for_reasons:
-  - marriage
 indicators:
   - "certificate of marriage"
   - "united in marriage"
@@ -28,15 +30,51 @@ validation_rules:
   - "The document must appear to be an official government-issued certificate"
 ```
 
+### `config/doc_type_rules/marriage.yaml`
+```yaml
+doc_type: marriage
+display_name: Marriage
+description: "Employee is adding a beneficiary due to a recent marriage"
+required_attachment_types:
+  - marriage_certificate
+form_validation_rules:
+  - "Beneficiary first name must be filled out"
+  - "The marriage checkbox or reason must be selected on the form"
+```
+
+### `config/doc_type_rules/new_hire.yaml`
+```yaml
+doc_type: new_hire
+display_name: New Hire
+description: "Employee is enrolling beneficiaries as part of new hire onboarding"
+required_attachment_types: []
+form_validation_rules:
+  - "Employee hire date or effective date must be filled out"
+  - "The new hire checkbox or reason must be selected on the form"
+  - "At least one beneficiary must be listed on the form"
+```
+
 ### `src/classification/doc_type_config.py`
 - `DocTypeConfig` — a Pydantic model that represents one doc type definition:
   - `doc_type: str`
   - `display_name: str`
   - `description: str`
-  - `required_for_reasons: list[str]`
   - `indicators: list[str]`
   - `validation_rules: list[str]`
 - Function: `load_doc_type_configs(config_dir: Path) -> list[DocTypeConfig]`
+  - Reads all `*.yaml` files in `config_dir`
+  - Validates each against the Pydantic model
+  - Returns list of all loaded configs
+  - Logs a warning and skips any file that fails validation
+
+### `src/classification/doc_type_rule_config.py`
+- `DocTypeRuleConfig` — a Pydantic model that represents one doc type rule definition:
+  - `doc_type: str`
+  - `display_name: str`
+  - `description: str`
+  - `required_attachment_types: list[str]` (defaults to empty)
+  - `form_validation_rules: list[str]` (defaults to empty)
+- Function: `load_doc_type_rule_configs(config_dir: Path) -> list[DocTypeRuleConfig]`
   - Reads all `*.yaml` files in `config_dir`
   - Validates each against the Pydantic model
   - Returns list of all loaded configs
@@ -46,11 +84,11 @@ validation_rules:
 - `FormAnalyzer` class — constructor takes:
   - `client: openai.AsyncAzureOpenAI`
   - `deployment: str`
-  - `doc_type_configs: list[DocTypeConfig]`
+  - `doc_type_rule_configs: list[DocTypeRuleConfig]`
 - Method: `async analyze(extracted: ExtractedDoc) -> FormAnalysisResult`
 - Implementation:
-  1. Build the system prompt dynamically from `doc_type_configs`:
-     - Collect all unique `required_for_reasons` values across all configs → these are the valid reasons
+  1. Build the system prompt dynamically from `doc_type_rule_configs`:
+     - Collect all `doc_type` values from the configs → these are the valid reasons/types
      - The core prompt instructs the LLM to determine form type, reason, names, and relevance
      - The valid reasons list is injected into the prompt
      ```
@@ -88,13 +126,20 @@ validation_rules:
 - Verify `response_format` is set to `{"type": "json_object"}`
 - Use `pytest.mark.asyncio` for all tests
 - Use `unittest.mock.AsyncMock` for mocking the async OpenAI client
-- Create `DocTypeConfig` test fixtures directly (don't load from actual YAML in unit tests)
+- Create `DocTypeRuleConfig` test fixtures directly (don't load from actual YAML in unit tests)
 
 ### `tests/test_doc_type_config.py`
 - Test `load_doc_type_configs`:
   - Create temp YAML files in `tmp_path`, call `load_doc_type_configs()`, assert correct parsing
   - Test invalid YAML is skipped with a warning
   - Test empty directory returns empty list
+
+### `tests/test_doc_type_rule_config.py`
+- Test `load_doc_type_rule_configs`:
+  - Create temp YAML files in `tmp_path`, call `load_doc_type_rule_configs()`, assert correct parsing
+  - Test invalid YAML is skipped with a warning
+  - Test empty directory returns empty list
+  - Test configs with `required_attachment_types: []`
 
 ## Acceptance Criteria
 - `FormAnalyzer.analyze()` builds its prompt dynamically from doc type configs

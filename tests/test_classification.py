@@ -1,10 +1,15 @@
-"""Tests for the form analyzer."""
+"""Tests for the form analyzer and attachment classifier."""
 
 import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.classification.attachment_classifier import (
+    AttachmentClassifier,
+    _build_classifier_prompt,
+)
+from src.classification.doc_type_config import DocTypeConfig
 from src.classification.doc_type_rule_config import DocTypeRuleConfig
 from src.classification.form_analyzer import FormAnalyzer, _build_system_prompt
 from src.models import ExtractedDoc
@@ -12,24 +17,24 @@ from src.models import ExtractedDoc
 
 SAMPLE_RULE_CONFIGS = [
     DocTypeRuleConfig(
-        reason="marriage",
+        doc_type="marriage",
         display_name="Marriage",
         description="Adding beneficiary due to marriage",
-        required_doc_types=["marriage_certificate"],
+        required_attachment_types=["marriage_certificate"],
         form_validation_rules=["Beneficiary first name must be filled out"],
     ),
     DocTypeRuleConfig(
-        reason="birth",
+        doc_type="birth",
         display_name="Birth",
         description="Adding beneficiary due to birth",
-        required_doc_types=["birth_certificate"],
+        required_attachment_types=["birth_certificate"],
         form_validation_rules=[],
     ),
     DocTypeRuleConfig(
-        reason="new_hire",
+        doc_type="new_hire",
         display_name="New Hire",
         description="New hire enrollment",
-        required_doc_types=[],
+        required_attachment_types=[],
         form_validation_rules=["Hire date must be filled out"],
     ),
 ]
@@ -168,3 +173,123 @@ class TestBuildSystemPrompt:
 
         call_kwargs = client.chat.completions.create.call_args.kwargs
         assert call_kwargs["model"] == "my-gpt4o-deployment"
+
+
+# --- Attachment Classifier Tests ---
+
+SAMPLE_DOC_TYPE_CONFIGS = [
+    DocTypeConfig(
+        doc_type="marriage_certificate",
+        display_name="Marriage Certificate",
+        description="Official government-issued certificate of marriage",
+        indicators=["certificate of marriage", "united in marriage", "marriage license"],
+        validation_rules=["Names must match"],
+    ),
+    DocTypeConfig(
+        doc_type="birth_certificate",
+        display_name="Birth Certificate",
+        description="Official government-issued certificate of live birth",
+        indicators=["certificate of live birth", "date of birth", "born on"],
+        validation_rules=["Date must be recent"],
+    ),
+]
+
+SAMPLE_ATTACHMENT = ExtractedDoc(
+    source_path="marriage_cert.pdf",
+    content="STATE OF CALIFORNIA\nCERTIFICATE OF MARRIAGE\nThis certifies that Jane Smith and Michael Johnson were united in marriage on January 15, 2026.",
+    fields={},
+    confidence=0.90,
+)
+
+
+class TestAttachmentClassifier:
+    @pytest.mark.asyncio
+    async def test_marriage_certificate(self):
+        response = {
+            "doc_type": "marriage_certificate",
+            "confidence": 0.95,
+            "reasoning": "Contains marriage certificate language",
+        }
+        client = _make_mock_client(response)
+        classifier = AttachmentClassifier(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIGS)
+
+        result = await classifier.classify(SAMPLE_ATTACHMENT)
+
+        assert result.doc_type == "marriage_certificate"
+        assert result.confidence == 0.95
+        assert result.reasoning == "Contains marriage certificate language"
+
+    @pytest.mark.asyncio
+    async def test_unknown_document(self):
+        response = {
+            "doc_type": "unknown",
+            "confidence": 0.3,
+            "reasoning": "Document does not match known categories",
+        }
+        client = _make_mock_client(response)
+        classifier = AttachmentClassifier(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIGS)
+
+        unknown_doc = ExtractedDoc(
+            source_path="random.pdf",
+            content="This is a random document with no recognizable pattern.",
+            fields={},
+            confidence=0.80,
+        )
+        result = await classifier.classify(unknown_doc)
+
+        assert result.doc_type == "unknown"
+        assert result.confidence == 0.3
+
+    @pytest.mark.asyncio
+    async def test_prompt_includes_doc_types_and_indicators(self):
+        client = _make_mock_client(
+            {"doc_type": "unknown", "confidence": 0.0, "reasoning": ""}
+        )
+        classifier = AttachmentClassifier(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIGS)
+
+        await classifier.classify(SAMPLE_ATTACHMENT)
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        prompt = call_kwargs["messages"][0]["content"]
+        assert "marriage_certificate" in prompt
+        assert "birth_certificate" in prompt
+        assert "certificate of marriage" in prompt
+        assert "certificate of live birth" in prompt
+        assert '"unknown"' in prompt
+
+    @pytest.mark.asyncio
+    async def test_json_response_format(self):
+        client = _make_mock_client(
+            {"doc_type": "unknown", "confidence": 0.0, "reasoning": ""}
+        )
+        classifier = AttachmentClassifier(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIGS)
+
+        await classifier.classify(SAMPLE_ATTACHMENT)
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+
+    @pytest.mark.asyncio
+    async def test_user_message_contains_content(self):
+        client = _make_mock_client(
+            {"doc_type": "unknown", "confidence": 0.0, "reasoning": ""}
+        )
+        classifier = AttachmentClassifier(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIGS)
+
+        await classifier.classify(SAMPLE_ATTACHMENT)
+
+        call_kwargs = client.chat.completions.create.call_args.kwargs
+        user_msg = call_kwargs["messages"][1]["content"]
+        assert SAMPLE_ATTACHMENT.content in user_msg
+
+
+class TestBuildClassifierPrompt:
+    def test_includes_all_doc_types(self):
+        prompt = _build_classifier_prompt(SAMPLE_DOC_TYPE_CONFIGS)
+        assert "marriage_certificate" in prompt
+        assert "birth_certificate" in prompt
+        assert '"unknown"' in prompt
+
+    def test_empty_configs(self):
+        prompt = _build_classifier_prompt([])
+        assert '"unknown"' in prompt

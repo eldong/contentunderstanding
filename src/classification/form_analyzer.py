@@ -30,10 +30,10 @@ Return ONLY valid JSON matching this exact schema:
 
 
 def _build_system_prompt(doc_type_rule_configs: list[DocTypeRuleConfig]) -> str:
-    """Build the system prompt with valid reasons from all doc type rule configs."""
-    reasons_sorted = sorted(c.reason for c in doc_type_rule_configs)
-    reasons_list = ", ".join(reasons_sorted)
-    reasons_enum = " | ".join(f'"{r}"' for r in reasons_sorted) + " | null"
+    """Build the system prompt with valid doc types from all doc type rule configs."""
+    types_sorted = sorted(c.doc_type for c in doc_type_rule_configs)
+    reasons_list = ", ".join(types_sorted)
+    reasons_enum = " | ".join(f'"{ r}"' for r in types_sorted) + " | null"
     return SYSTEM_PROMPT_TEMPLATE.format(
         reasons_list=reasons_list,
         reasons_enum=reasons_enum,
