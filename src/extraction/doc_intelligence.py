@@ -1,6 +1,7 @@
 """Azure Document Intelligence extractor using DefaultAzureCredential."""
 
 import asyncio
+import io
 import logging
 from pathlib import Path
 
@@ -32,8 +33,7 @@ class DocIntelligenceExtractor(Extractor):
     def _analyze(self, file_bytes: bytes, source_path: str) -> ExtractedDoc:
         poller = self._client.begin_analyze_document(
             "prebuilt-read",
-            analyze_request=file_bytes,
-            content_type="application/octet-stream",
+            body=io.BytesIO(file_bytes),
         )
         result = poller.result()
 
