@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from openai import AsyncAzureOpenAI
 
 from src.classification.doc_type_config import DocTypeConfig
-from src.models import ExtractedDoc, FormAnalysisResult, ValidationResult
+from src.models import ExtractedDoc, FormAnalysisResult, RuleResult, ValidationResult
 from src.validators.base import BaseValidator
 
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -16,10 +16,13 @@ You are verifying a "{display_name}" attachment against the submitted form.
 
 Employee name from form: {employee_first_name} {employee_last_name}
 Beneficiary name from form: {beneficiary_first_name}
-Application date from form: {application_date}
 Today's date: {today_date}
 
-Validate the following rules against the attachment text:
+Validate the following rules against the attachment text.
+The full text of the submitted form is provided below the attachment text
+so you can extract any dates or details the rules reference from the form.
+
+Rules:
 {rules}
 
 For each rule, determine if it passes or fails.
@@ -54,9 +57,9 @@ Return ONLY valid JSON:
 }}
 
 The "date_check.extracted_date" is the date found on the attachment document.
-The "date_check.reference_date" is the date the window is measured from. Use
-the application date from the form if the rule references it; otherwise use
-today's date.
+The "date_check.reference_date" is the date the window is measured from.
+Extract it from the form text or attachment text based on what the rule
+describes. If the rule does not specify a reference, use today's date.
 The "date_check.window" field must use the format "<number> <unit>" where
 unit is one of: days, weeks, months, years. Example: "12 months".
 Set "date_check" to null for rules that do not involve date-window checks."""
@@ -95,34 +98,37 @@ class LLMValidator(BaseValidator):
     async def validate(
         self,
         form_analysis: FormAnalysisResult,
+        form_extracted: ExtractedDoc,
         attachment_extracted: ExtractedDoc,
     ) -> ValidationResult:
         rules_text = "\n".join(f"- {r}" for r in self._config.validation_rules)
         today = date.today()
-        application_date_str = form_analysis.application_date or today.isoformat()
         system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
             display_name=self._config.display_name,
             employee_first_name=form_analysis.employee_first_name or "",
             employee_last_name=form_analysis.employee_last_name or "",
             beneficiary_first_name=form_analysis.beneficiary_first_name or "",
-            application_date=application_date_str,
             today_date=today.isoformat(),
             rules=rules_text,
+        )
+
+        user_content = (
+            f"=== ATTACHMENT TEXT ===\n{attachment_extracted.content}\n\n"
+            f"=== SUBMITTED FORM TEXT ===\n{form_extracted.content}"
         )
 
         response = await self._client.chat.completions.create(
             model=self._deployment,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Validate this document:\n\n{attachment_extracted.content}"},
+                {"role": "user", "content": user_content},
             ],
             temperature=0,
             response_format={"type": "json_object"},
         )
 
         raw = json.loads(response.choices[0].message.content)
-        failed_reasons: list[str] = []
-        passed_reasons: list[str] = []
+        rule_results: list[RuleResult] = []
 
         for r in raw["results"]:
             date_check = r.get("date_check")
@@ -132,16 +138,20 @@ class LLMValidator(BaseValidator):
                 window_str = date_check.get("window")
                 ref_str = date_check.get("reference_date")
                 if not date_str:
-                    failed_reasons.append(
-                        f"Could not extract a date for rule: {r['rule']}"
-                    )
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="fail",
+                        detail=f"Could not extract a date for rule: {r['rule']}",
+                    ))
                     continue
                 try:
                     event_date = date.fromisoformat(date_str)
                 except ValueError:
-                    failed_reasons.append(
-                        f"Could not parse date '{date_str}' for rule: {r['rule']}"
-                    )
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="fail",
+                        detail=f"Could not parse date '{date_str}' for rule: {r['rule']}",
+                    ))
                     continue
                 try:
                     ref_date = date.fromisoformat(ref_str) if ref_str else today
@@ -150,38 +160,54 @@ class LLMValidator(BaseValidator):
                 try:
                     window = _parse_duration(window_str)
                 except (ValueError, TypeError):
-                    failed_reasons.append(
-                        f"Could not parse time window '{window_str}' for rule: {r['rule']}"
-                    )
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="fail",
+                        detail=f"Could not parse time window '{window_str}' for rule: {r['rule']}",
+                    ))
                     continue
                 cutoff = ref_date - window
                 if event_date > ref_date:
-                    failed_reasons.append(
-                        f"The date {event_date.isoformat()} is after the "
-                        f"application date {ref_date.isoformat()}"
-                    )
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="fail",
+                        detail=(
+                            f"The date {event_date.isoformat()} is after the "
+                            f"application date {ref_date.isoformat()}"
+                        ),
+                    ))
                 elif event_date < cutoff:
-                    failed_reasons.append(
-                        f"The date {event_date.isoformat()} is not within the last "
-                        f"{window_str} of {ref_date.isoformat()} "
-                        f"(cutoff: {cutoff.isoformat()})"
-                    )
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="fail",
+                        detail=(
+                            f"The date {event_date.isoformat()} is not within the last "
+                            f"{window_str} of {ref_date.isoformat()} "
+                            f"(cutoff: {cutoff.isoformat()})"
+                        ),
+                    ))
                 else:
-                    passed_reasons.append(
-                        f"The date {event_date.isoformat()} is within the last "
-                        f"{window_str} of {ref_date.isoformat()} "
-                        f"(cutoff: {cutoff.isoformat()})"
-                    )
-            elif not r["passed"]:
-                failed_reasons.append(r["reason"])
+                    rule_results.append(RuleResult(
+                        rule=r["rule"],
+                        result="pass",
+                        detail=(
+                            f"The date {event_date.isoformat()} is within the last "
+                            f"{window_str} of {ref_date.isoformat()} "
+                            f"(cutoff: {cutoff.isoformat()})"
+                        ),
+                    ))
             else:
-                passed_reasons.append(r["reason"])
+                rule_results.append(RuleResult(
+                    rule=r["rule"],
+                    result="pass" if r["passed"] else "fail",
+                    detail=r["reason"],
+                ))
 
+        has_failures = any(rr.result == "fail" for rr in rule_results)
         return ValidationResult(
             submission_id="",
             form_name=str(attachment_extracted.source_path),
             submitted_by="",
-            status="passed" if not failed_reasons else "failed",
-            reasons=failed_reasons,
-            passed_reasons=passed_reasons,
+            status="failed" if has_failures else "passed",
+            rule_results=rule_results,
         )

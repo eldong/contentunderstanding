@@ -12,5 +12,6 @@ class BaseValidator(ABC):
     async def validate(
         self,
         form_analysis: FormAnalysisResult,
+        form_extracted: ExtractedDoc,
         attachment_extracted: ExtractedDoc,
     ) -> ValidationResult: ...

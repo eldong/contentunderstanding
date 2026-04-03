@@ -15,6 +15,7 @@ from src.models import (
     ClassifierResponse,
     ExtractedDoc,
     FormAnalysisResult,
+    RuleResult,
     SubmissionWorkItem,
     ValidationResult,
 )
@@ -105,16 +106,21 @@ def _make_mock_classifier(doc_type: str, confidence: float = 0.95) -> MagicMock:
     return classifier
 
 
-def _make_mock_validator(status: str = "passed", reasons: list[str] | None = None) -> MagicMock:
+def _make_mock_validator(
+    status: str = "passed",
+    reasons: list[str] | None = None,
+    rule_results: list[RuleResult] | None = None,
+) -> MagicMock:
     validator = MagicMock()
 
-    async def _validate(form_analysis, att_extracted):
+    async def _validate(form_analysis, form_extracted, att_extracted):
         return ValidationResult(
             submission_id="",
             form_name="",
             submitted_by="",
             status=status,
             reasons=list(reasons) if reasons else [],
+            rule_results=list(rule_results) if rule_results else [],
         )
 
     validator.validate = _validate
@@ -295,7 +301,11 @@ class TestPipeline:
             attachment_paths=["samples/sub_001/cert.pdf"]
         )
         validator = _make_mock_validator(
-            status="failed", reasons=["Names do not match", "Date too old"]
+            status="failed",
+            rule_results=[
+                RuleResult(rule="Names must match", result="fail", detail="Names do not match"),
+                RuleResult(rule="Date is recent", result="fail", detail="Date too old"),
+            ],
         )
         registry = _make_mock_registry({"marriage_certificate": validator})
 
@@ -312,8 +322,10 @@ class TestPipeline:
 
         assert len(results) == 1
         assert results[0].status == "failed"
-        assert "Names do not match" in results[0].reasons
-        assert "Date too old" in results[0].reasons
+        fails = [rr for rr in results[0].rule_results if rr.result == "fail"]
+        assert len(fails) == 2
+        assert "Names do not match" in fails[0].detail
+        assert "Date too old" in fails[1].detail
 
     @pytest.mark.asyncio
     async def test_multiple_submissions(self, tmp_path):

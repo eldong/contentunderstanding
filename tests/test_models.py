@@ -9,6 +9,7 @@ from src.models import (
     ClassifierResponse,
     ExtractedDoc,
     FormAnalysisResult,
+    RuleResult,
     SubmissionWorkItem,
     ValidationResult,
 )
@@ -101,6 +102,20 @@ class TestClassifierResponse:
         assert restored.confidence == 0.92
 
 
+class TestRuleResult:
+    def test_pass_rule(self):
+        rr = RuleResult(rule="Names must match", result="pass", detail="Names match")
+        assert rr.result == "pass"
+
+    def test_fail_rule(self):
+        rr = RuleResult(rule="Names must match", result="fail", detail="Name mismatch")
+        assert rr.result == "fail"
+
+    def test_invalid_result(self):
+        with pytest.raises(ValidationError):
+            RuleResult(rule="x", result="maybe", detail="y")  # type: ignore[arg-type]
+
+
 class TestValidationResult:
     def test_pass_result(self):
         result = ValidationResult(
@@ -108,21 +123,24 @@ class TestValidationResult:
             form_name="Add Beneficiary",
             submitted_by="Jane",
             status="passed",
-            passed_reasons=["Names match", "Date is within range"],
+            rule_results=[
+                RuleResult(rule="Names must match", result="pass", detail="Names match"),
+                RuleResult(rule="Date is recent", result="pass", detail="Date is within range"),
+            ],
         )
         assert result.status == "passed"
-        assert result.reasons == []
-        assert len(result.passed_reasons) == 2
+        assert len(result.rule_results) == 2
+        assert all(rr.result == "pass" for rr in result.rule_results)
         assert result.timestamp  # auto-generated
 
-    def test_passed_reasons_defaults_empty(self):
+    def test_rule_results_defaults_empty(self):
         result = ValidationResult(
             submission_id="SUB-001",
             form_name="Add Beneficiary",
             submitted_by="Jane",
             status="passed",
         )
-        assert result.passed_reasons == []
+        assert result.rule_results == []
 
     def test_fail_result(self):
         result = ValidationResult(
@@ -130,9 +148,24 @@ class TestValidationResult:
             form_name="Add Beneficiary",
             submitted_by="Jane",
             status="failed",
-            reasons=["Employee name not found", "Date too old"],
+            rule_results=[
+                RuleResult(rule="Names must match", result="fail", detail="Employee name not found"),
+                RuleResult(rule="Date is recent", result="fail", detail="Date too old"),
+            ],
         )
-        assert len(result.reasons) == 2
+        assert len(result.rule_results) == 2
+        assert all(rr.result == "fail" for rr in result.rule_results)
+
+    def test_error_uses_reasons(self):
+        result = ValidationResult(
+            submission_id="SUB-001",
+            form_name="X",
+            submitted_by="Y",
+            status="error",
+            reasons=["No matching form type"],
+        )
+        assert len(result.reasons) == 1
+        assert result.rule_results == []
 
     def test_invalid_status(self):
         with pytest.raises(ValidationError):
@@ -149,11 +182,14 @@ class TestValidationResult:
             form_name="Add Beneficiary",
             submitted_by="Jane",
             status="passed",
-            reasons=[],
-            passed_reasons=["Names match", "Date is within range"],
+            rule_results=[
+                RuleResult(rule="Names must match", result="pass", detail="Names match"),
+                RuleResult(rule="Date is recent", result="pass", detail="Date is within range"),
+            ],
         )
         data = result.model_dump_json()
         restored = ValidationResult.model_validate_json(data)
         assert restored.status == "passed"
-        assert restored.reasons == []
-        assert restored.passed_reasons == ["Names match", "Date is within range"]
+        assert len(restored.rule_results) == 2
+        assert restored.rule_results[0].detail == "Names match"
+        assert restored.rule_results[1].detail == "Date is within range"

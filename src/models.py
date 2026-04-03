@@ -36,7 +36,6 @@ class FormAnalysisResult(BaseModel):
     employee_first_name: str | None = None
     employee_last_name: str | None = None
     beneficiary_first_name: str | None = None
-    application_date: str | None = None  # e.g. "2026-01-25" (YYYY-MM-DD)
     is_relevant: bool = False
 
 
@@ -48,6 +47,14 @@ class ClassifierResponse(BaseModel):
     reasoning: str = ""
 
 
+class RuleResult(BaseModel):
+    """Outcome of a single validation rule check."""
+
+    rule: str
+    result: Literal["pass", "fail"]
+    detail: str
+
+
 class ValidationResult(BaseModel):
     """Final validation outcome for a submission."""
 
@@ -56,6 +63,6 @@ class ValidationResult(BaseModel):
     submitted_by: str
     doc_type: str = ""
     status: Literal["passed", "failed", "error"]
+    rule_results: list[RuleResult] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
-    passed_reasons: list[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

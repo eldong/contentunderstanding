@@ -151,7 +151,7 @@ class Orchestrator:
                     continue
 
                 try:
-                    result = await validator.validate(form_analysis, att_extracted)
+                    result = await validator.validate(form_analysis, form_extracted, att_extracted)
                 except Exception as exc:
                     logger.error(
                         "Failed to validate attachment %s: %s", att_path, exc,

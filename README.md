@@ -18,7 +18,7 @@ Submission Folder          Pipeline                        Output
 1. **Ingestion** — scans a folder of submissions; each subfolder is one submission
 2. **Extraction** — converts PDFs and images to text using Azure Document Intelligence
 3. **Classification** — GPT-4o identifies the form type (e.g. "add dependent") and each attachment's document type (e.g. "marriage certificate")
-4. **Validation** — GPT-4o checks each attachment against the validation rules for its document type (name matching, date recency, official document, etc.)
+4. **Validation** — GPT-4o checks each attachment against the validation rules for its document type (name matching, date recency, official document, etc.). Date-window rules are verified programmatically for accuracy; the LLM extracts the relevant dates from the form and attachment text, and Python performs the comparison.
 
 Results are written to a JSONL file with one line per validated attachment, including status (`passed`, `failed`, or `error`) and reasons. If `AZURE_STORAGE_ACCOUNT_URL` and `AZURE_RESULTS_CONTAINER_NAME` are set, results are also uploaded to the specified Azure Blob Storage container.
 
@@ -52,7 +52,7 @@ indicators:
   - "marriage license"
 validation_rules:
   - "The names on the certificate must match the employee and/or beneficiary names"
-  - "The marriage date must be within the last 12 months"
+  - "The marriage date must be within the last 12 months of the application date from the form they filled out"
   - "The document must appear to be an official government-issued certificate"
 ```
 
@@ -139,12 +139,24 @@ Each line in `results.jsonl` is a JSON object:
   "submitted_by": "john.doe",
   "doc_type": "marriage_certificate",
   "status": "passed",
-  "reasons": [],
-  "passed_reasons": [
-    "Names Jane Smith and Michael match the employee and beneficiary on the form",
-    "The date 2026-02-14 is within the last 12 months (cutoff: 2025-04-02)",
-    "Document contains official state seal and officiant signature"
+  "rule_results": [
+    {
+      "rule": "The names on the certificate must match the employee and/or beneficiary names on the form.",
+      "result": "pass",
+      "detail": "Names Jane Smith and Michael match the employee and beneficiary on the form"
+    },
+    {
+      "rule": "The marriage date must be within the last 12 months of the application date from the form they filled out",
+      "result": "pass",
+      "detail": "The date 2026-02-14 is within the last 12 months of 2026-01-25 (cutoff: 2025-01-30)"
+    },
+    {
+      "rule": "The document must appear to be an official government-issued certificate",
+      "result": "pass",
+      "detail": "Document contains official state seal and officiant signature"
+    }
   ],
+  "reasons": [],
   "timestamp": "2026-04-02T12:00:00+00:00"
 }
 ```
@@ -152,8 +164,8 @@ Each line in `results.jsonl` is a JSON object:
 | Field | Description |
 |-------|-------------|
 | `status` | `"passed"` — all validation rules satisfied. `"failed"` — one or more rules not met. `"error"` — a processing failure occurred (extraction, classification, or no matching form type). |
-| `reasons` | Empty when passed. When failed, lists the specific rules that were not satisfied (e.g. `"The marriage date must be within the last 12 months"`). When error, describes what went wrong (e.g. `"Form extraction failed: ..."`). |
-| `passed_reasons` | Lists the specific rules that were satisfied, with explanations. Provides an audit trail showing why each rule passed. |
+| `rule_results` | A list of per-rule outcomes. Each entry has `rule` (the rule text), `result` (`"pass"` or `"fail"`), and `detail` (explanation). Provides a full audit trail — you can see exactly which rules passed and which failed in a single list. |
+| `reasons` | Used only for error-level messages (e.g. `"No matching form type"`, `"Form extraction failed: ..."`). Empty for `passed`/`failed` results. |
 
 ### Run tests
 

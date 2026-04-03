@@ -14,11 +14,11 @@ Document Validation System POC — validates HR submissions (form PDF + supporti
 - **Attachments**: All other PDF/DOCX/JPG/PNG files in the submission directory.
 
 ## Architecture
-- `src/models.py` — 5 Pydantic v2 contracts (SubmissionWorkItem, ExtractedDoc, FormAnalysisResult, ClassifierResponse, ValidationResult)
+- `src/models.py` — 6 Pydantic v2 contracts (SubmissionWorkItem, ExtractedDoc, FormAnalysisResult, ClassifierResponse, RuleResult, ValidationResult)
 - `src/ingestion/` — `IngestionAdapter` ABC + `LocalFolderAdapter`
 - `src/extraction/` — `Extractor` ABC + `DocIntelligenceExtractor` + `MockExtractor` (sidecar JSON)
 - `src/classification/` — `DocTypeConfig` + `FormTypeConfig` + `FormAnalyzer` + `AttachmentClassifier` (GPT-4o, data-driven)
-- `src/validators/` — `BaseValidator` ABC + `LLMValidator` (generic) + `ValidatorRegistry` (auto-discovers from config)
+- `src/validators/` — `BaseValidator` ABC + `LLMValidator` (generic, receives form text + attachment text) + `ValidatorRegistry` (auto-discovers from config)
 - `config/doc_types/` — YAML files defining attachment document types, indicators, and validation rules
 - `config/form_types/` — YAML files defining life events, required doc types, and form-field validation rules
 
@@ -33,6 +33,13 @@ Document Validation System POC — validates HR submissions (form PDF + supporti
 - `AttachmentClassifier` builds its prompt from all loaded `DocTypeConfig`s
 - `ValidatorRegistry` auto-discovers configs and creates `LLMValidator` instances
 - No per-type Python validator classes — `LLMValidator` is the single generic implementation
+
+## Validation Architecture
+- `LLMValidator.validate()` receives `form_analysis`, `form_extracted` (full form text), and `attachment_extracted`
+- Both form text and attachment text are sent to the LLM so it can extract dates/details from either document
+- **Date-window rules**: LLM auto-detects rules involving date comparisons and returns a `date_check` with `extracted_date`, `reference_date`, and `window`. Python overrides pass/fail with deterministic math. LLM decides pass/fail for all other rules.
+- YAML rules use plain English (e.g. "within 12 months of the application date from the form"). No special syntax for date rules.
+- Do NOT add form-specific fields (like `application_date`) to `FormAnalysisResult`. The LLM extracts what it needs from the form text at validation time.
 
 ## Conventions
 - Python 3.11+, Pydantic v2

@@ -35,7 +35,7 @@ tests/                               # 90 tests, all mock Azure services
 
 ## Data Contracts
 
-Five Pydantic v2 models in [src/models.py](src/models.py) define the data flowing through the pipeline:
+Six Pydantic v2 models in [src/models.py](src/models.py) define the data flowing through the pipeline:
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
@@ -43,7 +43,8 @@ Five Pydantic v2 models in [src/models.py](src/models.py) define the data flowin
 | `ExtractedDoc` | OCR/extraction output | `source_path`, `content`, `fields`, `confidence` |
 | `FormAnalysisResult` | LLM form analysis | `form_type`, `reason`, `employee_first_name`, `employee_last_name`, `beneficiary_first_name`, `is_relevant` |
 | `ClassifierResponse` | LLM attachment classification | `doc_type`, `confidence`, `reasoning` |
-| `ValidationResult` | Final output per attachment | `submission_id`, `form_name`, `submitted_by`, `doc_type`, `status` (`"passed"` / `"failed"` / `"error"`), `reasons`, `passed_reasons`, `timestamp` |
+| `RuleResult` | Outcome of one validation rule | `rule`, `result` (`"pass"` / `"fail"`), `detail` |
+| `ValidationResult` | Final output per attachment | `submission_id`, `form_name`, `submitted_by`, `doc_type`, `status` (`"passed"` / `"failed"` / `"error"`), `rule_results` (list of `RuleResult`), `reasons` (errors only), `timestamp` |
 
 ## Pipeline Stages
 
@@ -115,19 +116,19 @@ AttachmentClassifier(client: AsyncAzureOpenAI, deployment: str, doc_type_configs
 **Interface:** `BaseValidator` (ABC) — [src/validators/base.py](src/validators/base.py)
 
 ```python
-async def validate(self, form_analysis: FormAnalysisResult, attachment_extracted: ExtractedDoc) -> ValidationResult
+async def validate(self, form_analysis: FormAnalysisResult, form_extracted: ExtractedDoc, attachment_extracted: ExtractedDoc) -> ValidationResult
 ```
 
 **Implementation:** `LLMValidator` — [src/validators/llm_validator.py](src/validators/llm_validator.py)
 
-A single generic validator class. Uses `validation_rules` from a `DocTypeConfig` to build a GPT-4o prompt that checks each rule against the attachment text. The prompt includes employee/beneficiary names from the form analysis and today's date for time-sensitive rules.
+A single generic validator class. Uses `validation_rules` from a `DocTypeConfig` to build a GPT-4o prompt that checks each rule against the attachment text. The prompt includes employee/beneficiary names from the form analysis, today's date, and the full text of both the submitted form and the attachment — giving the LLM access to any dates or details the rules may reference.
 
-**Date-window rule handling:** LLMs are unreliable at making pass/fail decisions on date comparisons, so the validator uses a hybrid approach. The LLM is instructed to auto-detect rules involving date-window checks (e.g. "must be within the last 12 months") and return a `date_check` object containing the `extracted_date` (YYYY-MM-DD) and the `window` (e.g. "12 months") instead of deciding pass/fail itself. Python then performs the date comparison deterministically. For all other rules, the LLM's pass/fail judgment is used directly. This keeps YAML rules in plain English — business users don't need to learn any special syntax — while ensuring date math is always correct.
+**Date-window rule handling:** LLMs are unreliable at making pass/fail decisions on date comparisons, so the validator uses a hybrid approach. The LLM is instructed to auto-detect rules involving date-window checks (e.g. "must be within the last 12 months of the application date") and return a `date_check` object containing `extracted_date` (YYYY-MM-DD), `reference_date` (YYYY-MM-DD, extracted from whichever document the rule references), and `window` (e.g. "12 months"). Python then performs the date comparison deterministically. For all other rules, the LLM's pass/fail judgment is used directly. This keeps YAML rules in plain English — business users write rules like "The birth date must be within 60 days of the effective date on the form" and the LLM figures out which dates to extract from which documents. No code changes needed for new date fields or form types.
 
 Returns `ValidationResult` with:
 - `status = "passed"` if all rules pass, `"failed"` if any fail
-- `reasons` = list of explanations for failed rules
-- `passed_reasons` = list of explanations for passed rules (for audit trail)
+- `rule_results` = list of `RuleResult` objects, one per rule, each with `rule` (the rule text), `result` (`"pass"` or `"fail"`), and `detail` (explanation)
+- `reasons` = used only for error-level messages (e.g. "No matching form type")
 
 **Registry:** `ValidatorRegistry` — [src/validators/registry.py](src/validators/registry.py)
 

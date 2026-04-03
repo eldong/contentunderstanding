@@ -70,7 +70,6 @@ class TestFormAnalyzer:
             "employee_first_name": "Jane",
             "employee_last_name": "Smith",
             "beneficiary_first_name": "Michael",
-            "application_date": "2026-01-25",
             "is_relevant": True,
         }
         client = _make_mock_client(response)
@@ -83,7 +82,6 @@ class TestFormAnalyzer:
         assert result.employee_first_name == "Jane"
         assert result.employee_last_name == "Smith"
         assert result.beneficiary_first_name == "Michael"
-        assert result.application_date == "2026-01-25"
         assert result.is_relevant is True
 
     @pytest.mark.asyncio

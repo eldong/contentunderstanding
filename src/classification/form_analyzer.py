@@ -15,10 +15,7 @@ indicators. Valid reasons: {reasons_list}. \
 Set reason to the lowercase event name or null if none found.
 3. Extract the employee's first and last name.
 4. Extract the beneficiary's first name.
-5. Extract the application/signature/submission date from the form in YYYY-MM-DD format. \
-Look for the date the employee signed or submitted the form (not the effective date). \
-Set to null if not found.
-6. Set is_relevant to true ONLY if form_type is "add_beneficiary" AND a reason \
+5. Set is_relevant to true ONLY if form_type is "add_beneficiary" AND a reason \
 is selected.
 
 Return ONLY valid JSON matching this exact schema:
@@ -28,7 +25,6 @@ Return ONLY valid JSON matching this exact schema:
   "employee_first_name": "string or null",
   "employee_last_name": "string or null",
   "beneficiary_first_name": "string or null",
-  "application_date": "YYYY-MM-DD or null",
   "is_relevant": true | false
 }}"""
 

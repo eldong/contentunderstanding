@@ -8,6 +8,6 @@ indicators:
   - "joined in marriage"
   - "certificate of marriage registration"
 validation_rules:
-  - "The names on the certificate must match the employee and/or beneficiary names on the form"
+  - "The names on the certificate must match the employee and/or beneficiary names on the form. A maiden name vs. married name difference is acceptable for marriage certificates — if the first names match and the last name difference can be explained by the marriage, treat it as a match."
   - "The marriage date must be within the last 12 months of the application date from the form they filled out"
   - "The document must appear to be an official government-issued certificate"

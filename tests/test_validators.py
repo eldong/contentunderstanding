@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.classification.doc_type_config import DocTypeConfig
-from src.models import ExtractedDoc, FormAnalysisResult, ValidationResult
+from src.models import ExtractedDoc, FormAnalysisResult, RuleResult, ValidationResult
 from src.validators.base import BaseValidator
 from src.validators.llm_validator import LLMValidator
 from src.validators.registry import ValidatorRegistry
@@ -31,8 +31,14 @@ SAMPLE_FORM_ANALYSIS = FormAnalysisResult(
     employee_first_name="Jane",
     employee_last_name="Smith",
     beneficiary_first_name="Michael",
-    application_date="2026-03-15",
     is_relevant=True,
+)
+
+SAMPLE_FORM_EXTRACTED = ExtractedDoc(
+    source_path="form.pdf",
+    content="HEALTH BENEFITS ELECTION FORM\nName: Jane Smith\nAction: Add family member\nReason: Marriage\nDate: 2026-03-15\nFamily Member: Michael Johnson",
+    fields={},
+    confidence=0.95,
 )
 
 SAMPLE_ATTACHMENT = ExtractedDoc(
@@ -78,14 +84,14 @@ class TestLLMValidator:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         assert result.status == "passed"
-        assert result.reasons == []
-        assert len(result.passed_reasons) == 3
-        assert "Names match form" in result.passed_reasons
-        assert any("within" in r for r in result.passed_reasons)
-        assert "Appears official" in result.passed_reasons
+        assert len(result.rule_results) == 3
+        assert all(rr.result == "pass" for rr in result.rule_results)
+        assert result.rule_results[0].detail == "Names match form"
+        assert "within" in result.rule_results[1].detail
+        assert result.rule_results[2].detail == "Appears official"
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -102,21 +108,22 @@ class TestLLMValidator:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        result = await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 2
-        assert "No seal found" in result.reasons
-        assert any("not within" in r for r in result.reasons)
-        assert len(result.passed_reasons) == 1
-        assert "Names match" in result.passed_reasons[0]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        assert len(passes) == 1
+        assert len(fails) == 2
+        assert fails[0].detail.startswith("The date 2020-01-10 is not within")
+        assert fails[1].detail == "No seal found"
 
     @pytest.mark.asyncio
     async def test_prompt_includes_validation_rules(self):
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         system_msg = call_args.kwargs["messages"][0]["content"]
@@ -128,7 +135,7 @@ class TestLLMValidator:
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         system_msg = call_args.kwargs["messages"][0]["content"]
@@ -141,18 +148,19 @@ class TestLLMValidator:
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         user_msg = call_args.kwargs["messages"][1]["content"]
         assert "CERTIFICATE OF MARRIAGE" in user_msg
+        assert "HEALTH BENEFITS ELECTION FORM" in user_msg
 
     @pytest.mark.asyncio
     async def test_uses_json_response_format(self):
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", SAMPLE_DOC_TYPE_CONFIG)
 
-        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_ATTACHMENT)
+        await validator.validate(SAMPLE_FORM_ANALYSIS, SAMPLE_FORM_EXTRACTED, SAMPLE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         assert call_args.kwargs["response_format"] == {"type": "json_object"}
@@ -257,8 +265,21 @@ MARRIAGE_FORM = FormAnalysisResult(
     employee_first_name="Jane",
     employee_last_name="Smith",
     beneficiary_first_name="Michael",
-    application_date="2026-03-25",
     is_relevant=True,
+)
+
+MARRIAGE_FORM_EXTRACTED = ExtractedDoc(
+    source_path="form.pdf",
+    content=(
+        "HEALTH BENEFITS ELECTION FORM\n"
+        "Name: Jane Smith\n"
+        "Action: Add family member\n"
+        "Reason: Marriage\n"
+        "Signature Date: 2026-03-25\n"
+        "Family Member: Michael Johnson"
+    ),
+    fields={},
+    confidence=0.95,
 )
 
 MARRIAGE_ATTACHMENT = ExtractedDoc(
@@ -294,14 +315,14 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "passed"
-        assert result.reasons == []
-        assert len(result.passed_reasons) == 3
-        assert any("Jane Smith" in r or "Michael" in r for r in result.passed_reasons)
-        assert any("within" in r for r in result.passed_reasons)
-        assert any("seal" in r.lower() or "officiant" in r.lower() for r in result.passed_reasons)
+        assert len(result.rule_results) == 3
+        assert all(rr.result == "pass" for rr in result.rule_results)
+        assert any("Jane Smith" in rr.detail or "Michael" in rr.detail for rr in result.rule_results)
+        assert any("within" in rr.detail for rr in result.rule_results)
+        assert any("seal" in rr.detail.lower() or "officiant" in rr.detail.lower() for rr in result.rule_results)
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -318,12 +339,14 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 1
-        assert "Jane Smith" in result.reasons[0]
-        assert len(result.passed_reasons) == 2
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        assert len(fails) == 1
+        assert "Jane Smith" in fails[0].detail
+        assert len(passes) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -340,12 +363,14 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 1
-        assert "Michael" in result.reasons[0]
-        assert len(result.passed_reasons) == 2
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        assert len(fails) == 1
+        assert "Michael" in fails[0].detail
+        assert len(passes) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -362,14 +387,16 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 1
-        assert "not within" in result.reasons[0]
-        assert "2020-01-10" in result.reasons[0]
-        assert len(result.passed_reasons) == 2
-        assert "Names match" in result.passed_reasons[0]
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        assert len(fails) == 1
+        assert "not within" in fails[0].detail
+        assert "2020-01-10" in fails[0].detail
+        assert len(passes) == 2
+        assert "Names match" in passes[0].detail
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -386,12 +413,14 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 1
-        assert "seal" in result.reasons[0].lower() or "government" in result.reasons[0].lower()
-        assert len(result.passed_reasons) == 2
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        assert len(fails) == 1
+        assert "seal" in fails[0].detail.lower() or "government" in fails[0].detail.lower()
+        assert len(passes) == 2
 
     @pytest.mark.asyncio
     @patch("src.validators.llm_validator.date")
@@ -408,18 +437,20 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client(response)
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        result = await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         assert result.status == "failed"
-        assert len(result.reasons) == 3
-        assert result.passed_reasons == []
+        fails = [rr for rr in result.rule_results if rr.result == "fail"]
+        passes = [rr for rr in result.rule_results if rr.result == "pass"]
+        assert len(fails) == 3
+        assert len(passes) == 0
 
     @pytest.mark.asyncio
     async def test_prompt_uses_real_yaml_rules(self):
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         system_msg = call_args.kwargs["messages"][0]["content"]
@@ -432,7 +463,7 @@ class TestMarriageCertificateValidation:
         client = _make_mock_client({"results": []})
         validator = LLMValidator(client, "gpt-4o", MARRIAGE_CERT_CONFIG)
 
-        await validator.validate(MARRIAGE_FORM, MARRIAGE_ATTACHMENT)
+        await validator.validate(MARRIAGE_FORM, MARRIAGE_FORM_EXTRACTED, MARRIAGE_ATTACHMENT)
 
         call_args = client.chat.completions.create.call_args
         system_msg = call_args.kwargs["messages"][0]["content"]
