@@ -1,0 +1,33 @@
+flowchart TD
+    SP[SharePoint Online<br/>HR staff upload forms<br/>and supporting documents]
+
+    subgraph PROCESS[Automated Validation Pipeline]
+        DETECT[Detect new submissions]
+        READ[Read and extract<br/>document text]
+        CLASSIFY[Identify form type<br/>and supporting documents]
+        VALIDATE[Validate documents<br/>against business rules]
+    end
+
+    subgraph AZURE[Azure Services]
+        FUNC[Azure Functions<br/>Orchestration and processing]
+        DI[Azure Document Intelligence<br/>Read and extract document text]
+        AOAI[Azure OpenAI<br/>Classify documents and<br/>check business rules]
+        SB[Azure Service Bus<br/>Workload buffering]
+        BLOB[Azure Storage<br/>Runtime state]
+    end
+
+    OUT[SharePoint Results<br/>Status report by form type]
+
+    SP -->|New submission| DETECT
+    DETECT --> READ
+    READ --> CLASSIFY
+    CLASSIFY --> VALIDATE
+    VALIDATE --> OUT
+    OUT -->|Available to HR staff| SP
+
+    DETECT --- FUNC
+    DETECT --- SB
+    READ --- DI
+    CLASSIFY --- AOAI
+    VALIDATE --- AOAI
+    FUNC --- BLOB

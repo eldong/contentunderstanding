@@ -38,10 +38,10 @@ Participants will use Copilot to:
 
 ---
 
-### 🔴 Demo & Wrap-Up (Hour 5–6)
+### 🔴 Demos & Wrap-Up (Hour 5–6)
 - Team presentations (5-10 minutes each)  
 - Share learnings and approaches  
-- Judges feedback and highlights  
+- Feedback and highlights  
 
 ---
 

@@ -1,0 +1,32 @@
+flowchart TD
+    SP[SharePoint Online<br/>System of record<br/>Original files remain here]
+    ING[Azure Function<br/>Submission discovery<br/>Metadata scan only]
+    SB[Azure Service Bus<br/>Primary workload buffer<br/>Absorbs bursts]
+    ORCH[Durable Functions Orchestrator<br/>One workflow per submission]
+    YAML[Yaml Definitions<br/>Known form types<br/>Known attachment types<br/>Validation rules]
+    OCR[Azure Document Intelligence<br/>OCR and text extraction]
+    ROUTE[YAML-aware Routing<br/>Classify form and attachments<br/>against known types]
+    VAL[Generic Validation Engine<br/>Apply YAML rules]
+    AI[Azure OpenAI / Foundry Models<br/>Structured extraction<br/>Soft judgment]
+    PY[Deterministic Python<br/>Date logic<br/>Required docs<br/>Exact rule enforcement]
+    BLOB[Azure Blob Storage<br/>Durable runtime state<br/>Optional audit artifacts<br/>Optional YAML storage]
+    OUT[SharePoint Results<br/>CSV by form type]
+    SCALE[Future scale-out pattern<br/>Optional OCR / LLM / validation queues]
+
+    SP -->|Discover files| ING
+    ING -->|Submission manifest| SB
+    SB -->|Queued submission| ORCH
+    ORCH --> YAML
+    ORCH -->|Fetch files on demand| SP
+    ORCH --> OCR
+    OCR --> ROUTE
+    YAML --> ROUTE
+    ROUTE --> VAL
+    VAL --> AI
+    AI --> VAL
+    VAL --> PY
+    PY --> VAL
+    VAL --> ORCH
+    ORCH --> OUT
+    ORCH --> BLOB
+    ORCH -.-> SCALE

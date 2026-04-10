@@ -1,0 +1,37 @@
+flowchart TD
+    SP[SharePoint Online<br/>System of record]
+    ING[Azure Function<br/>Submission discovery]
+    SB[Azure Service Bus<br/>Submission queue]
+    DW[Durable Workflow<br/>One per submission]
+    OUT[SharePoint Results<br/>CSV by form type]
+
+    subgraph WF[Activities inside Durable Workflow]
+        EXT[ExtractText]
+        CLASS[Classify]
+        VAL[ValidateSubmission]
+        WRITE[WriteResults]
+    end
+
+    YAML[Yaml Definitions<br/>Form types<br/>Attachment types<br/>Rules]
+    OCR[Azure Document Intelligence]
+    AI[Azure OpenAI / Foundry]
+    PY[Deterministic Python Rules]
+    ST[Azure Storage<br/>Durable runtime state]
+
+    SP --> ING
+    ING --> SB
+    SB --> DW
+    DW --> EXT
+    EXT --> CLASS
+    CLASS --> VAL
+    VAL --> WRITE
+    WRITE --> OUT
+
+    EXT --> OCR
+    CLASS --> YAML
+    CLASS --> AI
+    VAL --> YAML
+    VAL --> AI
+    VAL --> PY
+
+    DW -. runtime state .-> ST

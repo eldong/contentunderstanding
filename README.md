@@ -114,9 +114,11 @@ Authentication uses `DefaultAzureCredential` — no API keys needed. Run `az log
 # Using Azure Document Intelligence for extraction
 python main.py --input samples/ --output results.jsonl
 
-# Using mock extraction (offline development, reads .mock.extracted.json sidecar files)
+# Using mock extraction (reads .mock.extracted.json sidecar files instead of calling Document Intelligence)
 python main.py --mock --input samples/ --output results.jsonl
 ```
+
+> **Note:** The `--mock` flag only skips Azure Document Intelligence for extraction. Classification and validation still call Azure OpenAI (GPT-4o), so `AZURE_AI_FOUNDRY_OPENAI_ENDPOINT` must be set and reachable in both modes.
 
 ### CLI options
 

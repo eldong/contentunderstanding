@@ -1,0 +1,60 @@
+flowchart TD
+    SP[SharePoint Online<br/>System of record<br/>Original files remain here]
+    ING[Azure Function<br/>Submission discovery<br/>Metadata scan only]
+    SB[Azure Service Bus<br/>Submission queue<br/>Primary workload buffer]
+    ORCH[Durable Functions Orchestrator<br/>One workflow per submission]
+
+    OUT[SharePoint Results<br/>CSV by form type]
+    ST[Azure Storage<br/>Durable runtime state]
+    YAML[Yaml Definitions<br/>Known form types<br/>Known attachment types<br/>Validation rules]
+
+    subgraph WF[Activities coordinated by the Orchestrator]
+        EXT_FORM[Activity: ExtractFormText<br/>Single form file]
+        EXT_ATTACH[Activity: ExtractAttachmentText<br/>Fan-out per attachment]
+        ANALYZE[Activity: AnalyzeForm<br/>Determine form type<br/>Extract key form facts]
+        REL{Relevant submission?}
+        CLASS_ATTACH[Activity: ClassifyAttachment<br/>Fan-out per attachment]
+        VALIDATE[Activity: ValidateSubmission<br/>Generic YAML-driven engine]
+        WRITE[Activity: WriteResults]
+    end
+
+    OCR[Azure Document Intelligence<br/>OCR / text extraction]
+    AI[Azure OpenAI / Foundry<br/>Constrained classification<br/>Structured extraction<br/>Soft judgment]
+    PY[Deterministic Python Rules<br/>Date windows<br/>Required docs<br/>Exact rule enforcement]
+
+    %% Main business flow
+    SP --> ING
+    ING -->|Submission manifest| SB
+    SB -->|Queued submission| ORCH
+
+    ORCH --> EXT_FORM
+    ORCH --> EXT_ATTACH
+
+    EXT_FORM --> OCR
+    EXT_ATTACH --> OCR
+
+    EXT_FORM --> ANALYZE
+    ANALYZE --> REL
+
+    REL -->|No| WRITE
+    REL -->|Yes| CLASS_ATTACH
+
+    EXT_ATTACH --> CLASS_ATTACH
+    CLASS_ATTACH --> VALIDATE
+    ANALYZE --> VALIDATE
+
+    VALIDATE --> WRITE
+    WRITE --> OUT
+
+    %% Supporting dependencies
+    ANALYZE --> YAML
+    ANALYZE --> AI
+
+    CLASS_ATTACH --> YAML
+    CLASS_ATTACH --> AI
+
+    VALIDATE --> YAML
+    VALIDATE --> AI
+    VALIDATE --> PY
+    
+    ORCH -. runtime state .-> ST

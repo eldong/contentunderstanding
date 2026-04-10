@@ -1,0 +1,23 @@
+flowchart TD
+    SP[SharePoint Online<br/>Source of truth for submitted files<br/>Results CSVs written back]
+    ING[Azure Function Ingestion<br/>Polls or detects new files<br/>Reads metadata only<br/>Groups by submission ID]
+    SB[Azure Service Bus Queue<br/>Buffers work<br/>Smooths bursts<br/>Reduces pressure on SharePoint / Graph]
+    ORCH[Azure Functions + Durable Functions<br/>Submission-level orchestrator]
+    DI[Azure Document Intelligence<br/>OCR / text extraction]
+    AOAI[Azure OpenAI<br/>Form classification<br/>Attachment classification<br/>Fact extraction]
+    PY[Deterministic Validation Code<br/>Date windows<br/>Name matching<br/>Required document checks]
+    BLOB[Azure Blob Storage<br/>Durable runtime state<br/>Optional temp artifacts<br/>Optional JSON audit results<br/>Optional YAML rule storage]
+    OUT[SharePoint Online Results<br/>CSV by form type<br/>Business-facing output]
+
+    SP -->|Metadata scan / file discovery| ING
+    ING -->|Submission manifest| SB
+    SB -->|Queued work item| ORCH
+    ORCH -->|Fetch files on demand| SP
+    ORCH --> DI
+    ORCH --> AOAI
+    DI --> ORCH
+    AOAI --> ORCH
+    ORCH --> PY
+    PY --> ORCH
+    ORCH --> BLOB
+    ORCH --> OUT
